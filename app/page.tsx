@@ -13,9 +13,18 @@ type GeneratedVideo = {
   duration?: number
   createdAt: string
   status?: string
+  characterId?: string | null
 }
 
-type Tab = "generate" | "buy" | "profile"
+type CharacterItem = {
+  id: string
+  name: string
+  description?: string | null
+  imageUrl?: string | null
+  createdAt: string
+}
+
+type Tab = "generate" | "characters" | "buy" | "profile"
 
 const RESOLUTIONS = ["480p", "720p", "1080p"]
 const ASPECT_RATIOS = ["16:9", "9:16", "1:1"]
@@ -176,9 +185,11 @@ function AppScreen({ session }: { session: Session }) {
   const [resolution, setResolution] = useState("720p")
   const [aspectRatio, setAspectRatio] = useState("16:9")
   const [duration, setDuration] = useState(5)
+  const [selectedCharacterId, setSelectedCharacterId] = useState("")
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [videos, setVideos] = useState<GeneratedVideo[]>([])
+  const [characters, setCharacters] = useState<CharacterItem[]>([])
   const [isLoadingVideos, setIsLoadingVideos] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [credits, setCredits] = useState<number | null>(null)
@@ -225,6 +236,18 @@ function AppScreen({ session }: { session: Session }) {
     }
   }, [authFetch])
 
+  const fetchCharacters = useCallback(async () => {
+    try {
+      const res = await authFetch("/api/characters")
+      if (res.ok) {
+        const data = await res.json()
+        setCharacters(data.characters ?? [])
+      }
+    } catch {
+      // abaikan
+    }
+  }, [authFetch])
+
   // Cek status video yang masih diproses secara berkala (dipakai kalau nanti pakai API asli).
   const pollStatus = useCallback(
     (id: string) => {
@@ -261,7 +284,8 @@ function AppScreen({ session }: { session: Session }) {
   useEffect(() => {
     fetchCredits()
     fetchVideos()
-  }, [fetchCredits, fetchVideos])
+    fetchCharacters()
+  }, [fetchCredits, fetchVideos, fetchCharacters])
 
   // Mulai polling untuk setiap video berstatus processing.
   useEffect(() => {
@@ -323,6 +347,7 @@ function AppScreen({ session }: { session: Session }) {
       formData.append("resolution", resolution)
       formData.append("aspectRatio", aspectRatio)
       formData.append("duration", String(duration))
+      if (selectedCharacterId) formData.append("characterId", selectedCharacterId)
       if (image) formData.append("image", image)
       const res = await authFetch("/api/generate", { method: "POST", body: formData })
       const data = await res.json()
@@ -337,6 +362,7 @@ function AppScreen({ session }: { session: Session }) {
           duration: data.duration,
           createdAt: data.createdAt,
           status: data.status ?? "done",
+          characterId: data.characterId ?? null,
         },
         ...prev,
       ])
@@ -351,9 +377,11 @@ function AppScreen({ session }: { session: Session }) {
   }
 
   const isOutOfCredits = credits !== null && credits <= 0
+  const selectedCharacter = characters.find((c) => c.id === selectedCharacterId) || null
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "generate", label: "🎬 Buat Video" },
+    { id: "characters", label: "🎭 Karakter" },
     { id: "buy", label: "💳 Beli Kredit" },
     { id: "profile", label: "👤 Profil" },
   ]
@@ -378,7 +406,7 @@ function AppScreen({ session }: { session: Session }) {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+              className={`flex-1 rounded-lg py-2 text-xs sm:text-sm font-medium transition ${
                 tab === t.id
                   ? "bg-gradient-to-r from-blue-600 to-violet-600 text-white"
                   : "text-gray-400 hover:text-white"
@@ -413,6 +441,36 @@ function AppScreen({ session }: { session: Session }) {
                   rows={4}
                   className="w-full rounded-xl bg-black/60 border border-gray-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Karakter (opsional)</label>
+                {characters.length === 0 ? (
+                  <p className="text-[11px] text-gray-500">
+                    Belum ada karakter. Buka tab 🎭 Karakter untuk membuat karakter yang konsisten.
+                  </p>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    {selectedCharacter?.imageUrl && (
+                      <img
+                        src={selectedCharacter.imageUrl}
+                        alt={selectedCharacter.name}
+                        className="h-12 w-12 rounded-lg object-cover border border-gray-700"
+                      />
+                    )}
+                    <select
+                      value={selectedCharacterId}
+                      onChange={(e) => setSelectedCharacterId(e.target.value)}
+                      className="flex-1 rounded-lg bg-black/60 border border-gray-700 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Tanpa karakter</option>
+                      {characters.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <p className="text-[11px] text-gray-500 mt-1">Pilih karakter agar wajahnya tetap konsisten (penguncian aktif penuh saat API asli tersambung).</p>
               </div>
 
               <div>
@@ -531,7 +589,11 @@ function AppScreen({ session }: { session: Session }) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {videos.map((video) => (
+                  {videos.map((video) => {
+                    const character = video.characterId
+                      ? characters.find((c) => c.id === video.characterId)
+                      : null
+                    return (
                     <div
                       key={video.id}
                       className="rounded-xl overflow-hidden border border-gray-800 bg-gray-900/60 hover:border-gray-700 transition"
@@ -554,6 +616,9 @@ function AppScreen({ session }: { session: Session }) {
                       <div className="p-3 space-y-2">
                         <p className="text-sm text-gray-200 line-clamp-2">{video.prompt}</p>
                         <div className="flex flex-wrap gap-1.5">
+                          {character && (
+                            <span className="text-[10px] font-medium bg-violet-500/20 border border-violet-500/40 text-violet-200 rounded px-1.5 py-0.5">🎭 {character.name}</span>
+                          )}
                           {video.resolution && (
                             <span className="text-[10px] font-medium bg-gray-800 rounded px-1.5 py-0.5 text-gray-300">{video.resolution}</span>
                           )}
@@ -582,11 +647,21 @@ function AppScreen({ session }: { session: Session }) {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </section>
           </>
+        )}
+
+        {tab === "characters" && (
+          <CharacterManager
+            session={session}
+            authFetch={authFetch}
+            characters={characters}
+            onChanged={fetchCharacters}
+          />
         )}
 
         {tab === "buy" && (
@@ -608,6 +683,178 @@ function AppScreen({ session }: { session: Session }) {
         )}
       </div>
     </div>
+  )
+}
+
+function CharacterManager({
+  session,
+  authFetch,
+  characters,
+  onChanged,
+}: {
+  session: Session
+  authFetch: (url: string, options?: RequestInit) => Promise<Response>
+  characters: CharacterItem[]
+  onChanged: () => void
+}) {
+  const supabase = getSupabaseBrowser()
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  function handleFile(f: File | null) {
+    setFile(f)
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return f ? URL.createObjectURL(f) : null
+    })
+  }
+
+  async function handleAdd(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!name.trim()) {
+      setError("Nama karakter wajib diisi.")
+      return
+    }
+    setSaving(true)
+    try {
+      let imageUrl: string | null = null
+      if (file) {
+        const safe = file.name.replace(/[^a-zA-Z0-9.]/g, "_")
+        const path = `${session.user.id}/${Date.now()}-${safe}`
+        const { error: upErr } = await supabase.storage.from("character-images").upload(path, file)
+        if (upErr) throw new Error("Gagal mengunggah foto: " + upErr.message)
+        imageUrl = supabase.storage.from("character-images").getPublicUrl(path).data.publicUrl
+      }
+      const res = await authFetch("/api/characters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), imageUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Gagal menyimpan karakter.")
+      setName("")
+      setDescription("")
+      handleFile(null)
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    try {
+      const res = await authFetch(`/api/characters/${id}`, { method: "DELETE" })
+      if (res.ok) onChanged()
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <section className="space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold">Karakter</h2>
+        <p className="text-sm text-gray-400 mt-1">
+          Buat karakter dengan foto &amp; deskripsi agar tampil konsisten di setiap video. Cocok untuk drama short &amp; konten affiliate.
+        </p>
+      </div>
+
+      <form onSubmit={handleAdd} className="space-y-4 bg-gray-900/60 backdrop-blur rounded-2xl p-6 border border-gray-800 shadow-xl">
+        <h3 className="text-sm font-semibold">Tambah Karakter</h3>
+        <div>
+          <label className="block text-sm font-medium mb-1">Nama karakter</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Contoh: Dinda, host review produk"
+            className="w-full rounded-xl bg-black/60 border border-gray-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Deskripsi (opsional)</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="Ciri khas: wanita muda, rambut hitam sebahu, jaket denim, ramah dan ekspresif..."
+            className="w-full rounded-xl bg-black/60 border border-gray-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Foto referensi (opsional)</label>
+          {preview ? (
+            <div className="flex items-center gap-3">
+              <img src={preview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-gray-700" />
+              <button type="button" onClick={() => handleFile(null)} className="text-sm text-red-400 hover:text-red-300">
+                Hapus foto
+              </button>
+            </div>
+          ) : (
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
+            />
+          )}
+          <p className="text-[11px] text-gray-500 mt-1">Foto jelas & menghadap depan membuat karakter lebih mudah dikunci nanti.</p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-300">{error}</div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 py-3 text-sm font-semibold hover:from-blue-500 hover:to-violet-500 disabled:opacity-50 transition"
+        >
+          {saving && <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+          {saving ? "Menyimpan..." : "Simpan Karakter"}
+        </button>
+      </form>
+
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Karakter Kamu {characters.length > 0 && `(${characters.length})`}</h3>
+        {characters.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-800 bg-gray-900/40 py-10 text-center">
+            <p className="text-sm text-gray-500">Belum ada karakter. Tambahkan karakter pertamamu di atas! 🎭</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {characters.map((c) => (
+              <div key={c.id} className="flex gap-3 rounded-xl border border-gray-800 bg-gray-900/60 p-3">
+                {c.imageUrl ? (
+                  <img src={c.imageUrl} alt={c.name} className="h-16 w-16 rounded-lg object-cover border border-gray-700 shrink-0" />
+                ) : (
+                  <div className="h-16 w-16 rounded-lg bg-gray-800 flex items-center justify-center text-xl shrink-0">🎭</div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">{c.name}</p>
+                  {c.description && <p className="text-xs text-gray-400 line-clamp-2 mt-0.5">{c.description}</p>}
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    disabled={deletingId === c.id}
+                    className="mt-2 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                  >
+                    {deletingId === c.id ? "Menghapus..." : "Hapus"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 

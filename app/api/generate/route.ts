@@ -32,6 +32,8 @@ export async function POST(req: Request) {
     const aspectRatio = (formData.get("aspectRatio") as string) || "16:9"
     const durationRaw = formData.get("duration")
     const duration = durationRaw ? parseInt(durationRaw as string, 10) : 5
+    const characterIdRaw = formData.get("characterId")
+    const characterId = typeof characterIdRaw === "string" && characterIdRaw ? characterIdRaw : null
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt wajib diisi." }, { status: 400 })
@@ -76,8 +78,9 @@ export async function POST(req: Request) {
         user_id: user.id,
         status: "done",
         prediction_id: null,
+        character_id: characterId,
       })
-      .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status")
+      .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status, character_id")
       .single()
 
     if (insertError || !videoRow) {
@@ -93,6 +96,7 @@ export async function POST(req: Request) {
       duration: videoRow.duration,
       createdAt: videoRow.created_at,
       status: videoRow.status,
+      characterId: videoRow.character_id,
       remainingCredits: updatedRow.balance,
     })
   } catch (err) {
