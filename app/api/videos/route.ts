@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
       .from("videos")
-      .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at")
+      .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50)
@@ -34,6 +34,7 @@ export async function GET(req: Request) {
       aspectRatio: v.aspect_ratio,
       duration: v.duration,
       createdAt: v.created_at,
+      status: v.status,
     }))
 
     return NextResponse.json({ videos })

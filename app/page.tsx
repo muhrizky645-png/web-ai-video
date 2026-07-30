@@ -1,17 +1,18 @@
 "use client"
 
-import { useCallback, useEffect, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { Session } from "@supabase/supabase-js"
 import { getSupabaseBrowser } from "@/lib/supabaseClient"
 
 type GeneratedVideo = {
   id: string
   prompt: string
-  videoUrl: string
+  videoUrl: string | null
   resolution?: string
   aspectRatio?: string
   duration?: number
   createdAt: string
+  status?: string
 }
 
 type Tab = "generate" | "buy" | "profile"
@@ -185,6 +186,8 @@ function AppScreen({ session }: { session: Session }) {
   const [buyingId, setBuyingId] = useState<string | null>(null)
   const [buyMessage, setBuyMessage] = useState<string | null>(null)
 
+  const pollingRef = useRef<Set<string>>(new Set())
+
   const authFetch = useCallback(
     async (url: string, options: RequestInit = {}): Promise<Response> => {
       const { data } = await supabase.auth.getSession()
@@ -222,10 +225,50 @@ function AppScreen({ session }: { session: Session }) {
     }
   }, [authFetch])
 
+  // Cek status video yang masih diproses secara berkala.
+  const pollStatus = useCallback(
+    (id: string) => {
+      if (pollingRef.current.has(id)) return
+      pollingRef.current.add(id)
+      let tries = 0
+      const tick = async () => {
+        tries++
+        try {
+          const res = await authFetch(`/api/videos/status?id=${id}`)
+          if (res.ok) {
+            const data = await res.json()
+            setVideos((prev) => prev.map((v) => (v.id === id ? { ...v, ...data } : v)))
+            if (data.status === "done" || data.status === "failed") {
+              pollingRef.current.delete(id)
+              if (data.status === "failed") fetchCredits()
+              return
+            }
+          }
+        } catch {
+          // abaikan, coba lagi
+        }
+        if (tries >= 60) {
+          pollingRef.current.delete(id)
+          return
+        }
+        setTimeout(tick, 3000)
+      }
+      setTimeout(tick, 3000)
+    },
+    [authFetch, fetchCredits]
+  )
+
   useEffect(() => {
     fetchCredits()
     fetchVideos()
   }, [fetchCredits, fetchVideos])
+
+  // Mulai polling untuk setiap video berstatus processing.
+  useEffect(() => {
+    videos.forEach((v) => {
+      if (v.status === "processing") pollStatus(v.id)
+    })
+  }, [videos, pollStatus])
 
   function handleImageChange(file: File | null) {
     setImage(file)
@@ -293,6 +336,7 @@ function AppScreen({ session }: { session: Session }) {
           aspectRatio: data.aspectRatio,
           duration: data.duration,
           createdAt: data.createdAt,
+          status: data.status ?? "processing",
         },
         ...prev,
       ])
@@ -347,8 +391,8 @@ function AppScreen({ session }: { session: Session }) {
 
         {tab === "generate" && (
           <>
-            <div className="mb-6 rounded-lg bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-xs text-yellow-300">
-              Mode uji coba &mdash; video yang dihasilkan masih dummy (belum terhubung ke Seedance API asli).
+            <div className="mb-6 rounded-lg bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-xs text-blue-200">
+              🎥 Terhubung ke <b>Replicate (WAN 2.2)</b> — video asli. Proses generate bisa memakan waktu ~1–2 menit, jadi mohon ditunggu ya.
             </div>
 
             <form
@@ -396,6 +440,7 @@ function AppScreen({ session }: { session: Session }) {
                     className="block w-full text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-700"
                   />
                 )}
+                <p className="text-[11px] text-gray-500 mt-1">Kalau kamu unggah gambar, video dibuat dari gambar itu (image-to-video).</p>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -456,7 +501,7 @@ function AppScreen({ session }: { session: Session }) {
                 {isGenerating && (
                   <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                 )}
-                {isGenerating ? "Sedang generate..." : "Generate Video"}
+                {isGenerating ? "Mengirim..." : "Generate Video"}
               </button>
             </form>
 
@@ -491,7 +536,21 @@ function AppScreen({ session }: { session: Session }) {
                       key={video.id}
                       className="rounded-xl overflow-hidden border border-gray-800 bg-gray-900/60 hover:border-gray-700 transition"
                     >
-                      <video src={video.videoUrl} controls className="w-full aspect-video bg-black" />
+                      {video.status === "processing" ? (
+                        <div className="w-full aspect-video bg-black flex flex-col items-center justify-center gap-2">
+                          <span className="h-6 w-6 rounded-full border-2 border-gray-600 border-t-white animate-spin" />
+                          <span className="text-xs text-gray-400">Sedang membuat video...</span>
+                        </div>
+                      ) : video.status === "failed" ? (
+                        <div className="w-full aspect-video bg-black flex flex-col items-center justify-center gap-1 px-3 text-center">
+                          <span className="text-sm text-red-400">Gagal membuat video 😕</span>
+                          <span className="text-[11px] text-gray-500">Kredit sudah dikembalikan. Coba lagi ya.</span>
+                        </div>
+                      ) : video.videoUrl ? (
+                        <video src={video.videoUrl} controls className="w-full aspect-video bg-black" />
+                      ) : (
+                        <div className="w-full aspect-video bg-black" />
+                      )}
                       <div className="p-3 space-y-2">
                         <p className="text-sm text-gray-200 line-clamp-2">{video.prompt}</p>
                         <div className="flex flex-wrap gap-1.5">
@@ -509,15 +568,17 @@ function AppScreen({ session }: { session: Session }) {
                           <span className="text-xs text-gray-500">
                             {new Date(video.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
                           </span>
-                          <a
-                            href={video.videoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download
-                            className="text-xs font-medium text-blue-400 hover:text-blue-300"
-                          >
-                            Unduh
-                          </a>
+                          {video.videoUrl && video.status !== "processing" && video.status !== "failed" && (
+                            <a
+                              href={video.videoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="text-xs font-medium text-blue-400 hover:text-blue-300"
+                            >
+                              Unduh
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>
