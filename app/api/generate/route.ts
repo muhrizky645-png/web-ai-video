@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSupabase } from "@/lib/supabaseClient"
+import { getSupabaseWithToken, getBearerToken } from "@/lib/supabaseClient"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +11,15 @@ const DUMMY_VIDEO_URLS = [
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabase()
+    const token = getBearerToken(req)
+    if (!token) return NextResponse.json({ error: "Kamu harus login dulu." }, { status: 401 })
+
+    const supabase = getSupabaseWithToken(token)
+    const { data: userData, error: userErr } = await supabase.auth.getUser()
+    const user = userData?.user
+    if (userErr || !user) {
+      return NextResponse.json({ error: "Sesi tidak valid, silakan login ulang." }, { status: 401 })
+    }
 
     const formData = await req.formData()
     const prompt = formData.get("prompt")
@@ -27,7 +35,7 @@ export async function POST(req: Request) {
     const { data: creditRow, error: fetchError } = await supabase
       .from("credits")
       .select("balance")
-      .eq("id", "default")
+      .eq("user_id", user.id)
       .single()
 
     if (fetchError || !creditRow) {
@@ -47,7 +55,7 @@ export async function POST(req: Request) {
     const { data: updatedRow, error: updateError } = await supabase
       .from("credits")
       .update({ balance: creditRow.balance - 1, updated_at: new Date().toISOString() })
-      .eq("id", "default")
+      .eq("user_id", user.id)
       .select("balance")
       .single()
 
@@ -57,7 +65,6 @@ export async function POST(req: Request) {
 
     const videoUrl = DUMMY_VIDEO_URLS[Math.floor(Math.random() * DUMMY_VIDEO_URLS.length)]
 
-    // Simpan hasil ke histori (tabel videos) supaya galeri tetap ada saat halaman di-refresh.
     const { data: videoRow, error: insertError } = await supabase
       .from("videos")
       .insert({
@@ -66,12 +73,12 @@ export async function POST(req: Request) {
         resolution,
         aspect_ratio: aspectRatio,
         duration,
+        user_id: user.id,
       })
       .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at")
       .single()
 
     if (insertError || !videoRow) {
-      // Kalau gagal menyimpan histori, video tetap dikembalikan agar UX tidak terganggu.
       return NextResponse.json({
         id: crypto.randomUUID(),
         prompt,

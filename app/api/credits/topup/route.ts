@@ -1,33 +1,41 @@
 import { NextResponse } from "next/server"
-import { getSupabase } from "@/lib/supabaseClient"
+import { getSupabaseWithToken, getBearerToken } from "@/lib/supabaseClient"
 
 export const dynamic = "force-dynamic"
 
 // Jumlah kredit yang ditambahkan tiap top-up (sementara, untuk uji coba).
 const TOPUP_AMOUNT = 10
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
-    const supabase = getSupabase()
+    const token = getBearerToken(req)
+    if (!token) return NextResponse.json({ error: "Belum login." }, { status: 401 })
 
-    const { data: creditRow, error: fetchError } = await supabase
-      .from("credits")
-      .select("balance")
-      .eq("id", "default")
-      .single()
-
-    if (fetchError || !creditRow) {
-      return NextResponse.json({ error: "Gagal mengambil data kredit." }, { status: 500 })
+    const supabase = getSupabaseWithToken(token)
+    const { data: userData, error: userErr } = await supabase.auth.getUser()
+    const user = userData?.user
+    if (userErr || !user) {
+      return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 })
     }
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: creditRow } = await supabase
       .from("credits")
-      .update({ balance: creditRow.balance + TOPUP_AMOUNT, updated_at: new Date().toISOString() })
-      .eq("id", "default")
+      .select("balance")
+      .eq("user_id", user.id)
+      .single()
+
+    const current = creditRow?.balance ?? 0
+
+    const { data: updated, error: upErr } = await supabase
+      .from("credits")
+      .upsert(
+        { user_id: user.id, balance: current + TOPUP_AMOUNT, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      )
       .select("balance")
       .single()
 
-    if (updateError || !updated) {
+    if (upErr || !updated) {
       return NextResponse.json({ error: "Gagal menambah kredit." }, { status: 500 })
     }
 
