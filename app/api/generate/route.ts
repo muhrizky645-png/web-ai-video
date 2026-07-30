@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
-import { supabase } from "@/lib/supabaseClient"
+import { getSupabase } from "@/lib/supabaseClient"
+
+export const dynamic = "force-dynamic"
 
 // Video dummy publik, dipakai sementara sebelum API Seedance asli disambungkan.
 const DUMMY_VIDEO_URLS = [
@@ -9,6 +11,8 @@ const DUMMY_VIDEO_URLS = [
 
 export async function POST(req: Request) {
   try {
+    const supabase = getSupabase()
+
     const formData = await req.formData()
     const prompt = formData.get("prompt")
 
