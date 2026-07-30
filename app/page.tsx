@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 
 type GeneratedVideo = {
   id: string
@@ -15,12 +15,33 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [videos, setVideos] = useState<GeneratedVideo[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [credits, setCredits] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetchCredits()
+  }, [])
+
+  async function fetchCredits() {
+    try {
+      const res = await fetch("/api/credits")
+      if (!res.ok) return
+      const data = await res.json()
+      setCredits(data.balance)
+    } catch {
+      // diamkan, saldo tetap ditampilkan sebagai tidak diketahui
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
 
     if (!prompt.trim()) {
       setError("Prompt tidak boleh kosong.")
+      return
+    }
+
+    if (credits !== null && credits <= 0) {
+      setError("Kredit kamu sudah habis.")
       return
     }
 
@@ -37,11 +58,11 @@ export default function Home() {
         body: formData,
       })
 
-      if (!res.ok) {
-        throw new Error("Gagal generate video")
-      }
-
       const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal generate video")
+      }
 
       setVideos((prev) => [
         {
@@ -52,19 +73,27 @@ export default function Home() {
         },
         ...prev,
       ])
+      setCredits(data.remainingCredits)
       setPrompt("")
       setImage(null)
     } catch (err) {
-      setError("Terjadi kesalahan saat generate video. Coba lagi.")
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan saat generate video.")
     } finally {
       setIsGenerating(false)
     }
   }
 
+  const isOutOfCredits = credits !== null && credits <= 0
+
   return (
     <div className="min-h-screen bg-black text-white px-6 py-10">
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-bold mb-1">AI Video Generator</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">AI Video Generator</h1>
+          <span className="text-sm font-medium bg-gray-800 rounded-full px-3 py-1">
+            Kredit: {credits === null ? "..." : credits}
+          </span>
+        </div>
         <p className="text-sm text-gray-400 mb-8">
           Mode uji coba &mdash; video yang dihasilkan masih dummy (belum terhubung ke Seedance API).
         </p>
@@ -95,10 +124,13 @@ export default function Home() {
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
+          {isOutOfCredits && !error && (
+            <p className="text-sm text-yellow-400">Kredit kamu sudah habis.</p>
+          )}
 
           <button
             type="submit"
-            disabled={isGenerating}
+            disabled={isGenerating || isOutOfCredits}
             className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGenerating ? "Sedang generate..." : "Generate Video"}
