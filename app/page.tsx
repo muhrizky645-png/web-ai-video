@@ -31,6 +31,21 @@ const ASPECT_RATIOS = ["16:9", "9:16", "1:1"]
 const DURATIONS = [4, 5, 8, 10]
 const MAX_PROMPT = 500
 
+const STYLE_PRESETS = [
+  { id: "cinematic", label: "Sinematik", suffix: "gaya sinematik, pencahayaan dramatis, depth of field" },
+  { id: "realistic", label: "Realistis", suffix: "realistis, detail tinggi, fotorealistik, 4k" },
+  { id: "anime", label: "Anime", suffix: "gaya anime, warna cerah, ilustrasi" },
+  { id: "3d", label: "3D / Pixar", suffix: "animasi 3D, gaya render Pixar" },
+  { id: "product", label: "Iklan Produk", suffix: "video iklan produk, studio lighting, bersih, komersial" },
+  { id: "vintage", label: "Vintage", suffix: "gaya retro vintage, grain film, warna hangat" },
+]
+
+const PLATFORM_PRESETS = [
+  { id: "tiktok", label: "TikTok / Reels", ratio: "9:16" },
+  { id: "youtube", label: "YouTube", ratio: "16:9" },
+  { id: "square", label: "Post (1:1)", ratio: "1:1" },
+]
+
 const CREDIT_PACKAGES = [
   { id: "small", credits: 10, price: "Rp 15.000", label: "Hemat", highlight: false },
   { id: "medium", credits: 50, price: "Rp 65.000", label: "Populer", highlight: true },
@@ -373,6 +388,11 @@ function AppScreen({ session }: { session: Session }) {
     })
   }
 
+  async function handleDeleteVideo(id: string) {
+    const res = await authFetch(`/api/videos/${id}`, { method: "DELETE" })
+    if (res.ok) setVideos((prev) => prev.filter((v) => v.id !== id))
+  }
+
   async function handleBuy(packageId: string) {
     setBuyingId(packageId)
     setBuyMessage(null)
@@ -569,7 +589,6 @@ function AppScreen({ session }: { session: Session }) {
         <div className="mx-auto max-w-4xl px-5 pb-16 pt-20 md:pt-10">
           {tab === "generate" && (
             <GenerateView
-              email={email}
               prompt={prompt}
               setPrompt={setPrompt}
               resolution={resolution}
@@ -591,6 +610,7 @@ function AppScreen({ session }: { session: Session }) {
               onGoCharacters={() => goTab("characters")}
               videos={videos}
               isLoadingVideos={isLoadingVideos}
+              onDeleteVideo={handleDeleteVideo}
             />
           )}
 
@@ -622,7 +642,6 @@ function AppScreen({ session }: { session: Session }) {
 
 /* ---------------- Generate view ---------------- */
 function GenerateView(props: {
-  email: string
   prompt: string
   setPrompt: (v: string) => void
   resolution: string
@@ -644,13 +663,34 @@ function GenerateView(props: {
   onGoCharacters: () => void
   videos: GeneratedVideo[]
   isLoadingVideos: boolean
+  onDeleteVideo: (id: string) => Promise<void>
 }) {
   const {
     prompt, setPrompt, resolution, setResolution, aspectRatio, setAspectRatio,
     duration, setDuration, characters, selectedCharacterId, setSelectedCharacterId,
     selectedCharacter, imagePreview, handleImageChange, isGenerating, isOutOfCredits,
-    error, onSubmit, onGoCharacters, videos, isLoadingVideos,
+    error, onSubmit, onGoCharacters, videos, isLoadingVideos, onDeleteVideo,
   } = props
+
+  const [galleryFilter, setGalleryFilter] = useState("")
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  function addStyle(suffix: string) {
+    const base = prompt.trim().replace(/[,\s]+$/, "")
+    const next = base ? `${base}, ${suffix}` : suffix
+    setPrompt(next.slice(0, MAX_PROMPT))
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id)
+    try {
+      await onDeleteVideo(id)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const shown = galleryFilter ? videos.filter((v) => v.characterId === galleryFilter) : videos
 
   return (
     <>
@@ -677,6 +717,23 @@ function GenerateView(props: {
             rows={4}
             className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Gaya (opsional)</label>
+          <div className="flex flex-wrap gap-2">
+            {STYLE_PRESETS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => addStyle(s.suffix)}
+                className="rounded-full border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs text-neutral-300 hover:border-indigo-500 hover:text-white transition"
+              >
+                + {s.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-1.5">Klik untuk menambahkan kata kunci gaya ke prompt.</p>
         </div>
 
         <div>
@@ -730,6 +787,27 @@ function GenerateView(props: {
           <p className="text-[11px] text-neutral-500 mt-1.5">Kalau kamu unggah gambar, video dibuat dari gambar itu (image-to-video).</p>
         </div>
 
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Platform (atur rasio otomatis)</label>
+          <div className="flex flex-wrap gap-2">
+            {PLATFORM_PRESETS.map((pf) => {
+              const active = aspectRatio === pf.ratio
+              return (
+                <button
+                  key={pf.id}
+                  type="button"
+                  onClick={() => setAspectRatio(pf.ratio)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    active ? "border-indigo-500 bg-indigo-500/15 text-white" : "border-neutral-700 bg-neutral-950 text-neutral-300 hover:border-neutral-600"
+                  }`}
+                >
+                  {pf.label} · {pf.ratio}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-neutral-400 mb-1.5">Resolusi</label>
@@ -775,9 +853,23 @@ function GenerateView(props: {
       </form>
 
       <section className="mt-12">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3">
           <h2 className="text-lg font-semibold">Galeri Hasil</h2>
-          {videos.length > 0 && <span className="text-xs text-neutral-500">{videos.length} video</span>}
+          <div className="flex items-center gap-2">
+            {characters.length > 0 && (
+              <select
+                value={galleryFilter}
+                onChange={(e) => setGalleryFilter(e.target.value)}
+                className="rounded-lg bg-neutral-950 border border-neutral-700 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Semua karakter</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
+            {shown.length > 0 && <span className="text-xs text-neutral-500">{shown.length} video</span>}
+          </div>
         </div>
 
         {isLoadingVideos ? (
@@ -797,10 +889,15 @@ function GenerateView(props: {
             <IconFilm className="h-8 w-8 text-neutral-600" />
             <p className="text-sm text-neutral-500 mt-3">Belum ada video. Yuk buat video pertamamu.</p>
           </div>
+        ) : shown.length === 0 ? (
+          <div className="flex flex-col items-center rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 py-12 text-center">
+            <IconUsers className="h-8 w-8 text-neutral-600" />
+            <p className="text-sm text-neutral-500 mt-3">Tidak ada video untuk karakter ini.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {videos.map((video) => {
-              const character = video.characterId ? props.characters.find((c) => c.id === video.characterId) : null
+            {shown.map((video) => {
+              const character = video.characterId ? characters.find((c) => c.id === video.characterId) : null
               return (
                 <div key={video.id} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900 hover:border-neutral-700 transition">
                   {video.status === "processing" ? (
@@ -835,11 +932,20 @@ function GenerateView(props: {
                       <span className="text-xs text-neutral-500">
                         {new Date(video.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
                       </span>
-                      {video.videoUrl && video.status !== "processing" && video.status !== "failed" && (
-                        <a href={video.videoUrl} target="_blank" rel="noopener noreferrer" download className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300">
-                          <IconDownload className="h-3.5 w-3.5" /> Unduh
-                        </a>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {video.videoUrl && video.status !== "processing" && video.status !== "failed" && (
+                          <a href={video.videoUrl} target="_blank" rel="noopener noreferrer" download className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300">
+                            <IconDownload className="h-3.5 w-3.5" /> Unduh
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleDelete(video.id)}
+                          disabled={deletingId === video.id}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 hover:text-red-400 disabled:opacity-50"
+                        >
+                          <IconTrash className="h-3.5 w-3.5" /> {deletingId === video.id ? "..." : "Hapus"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
