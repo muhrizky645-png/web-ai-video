@@ -52,6 +52,11 @@ const CREDIT_PACKAGES = [
   { id: "large", credits: 100, price: "Rp 120.000", label: "Terbaik", highlight: false },
 ]
 
+function findMentioned(text: string, characters: CharacterItem[]): CharacterItem[] {
+  if (!text) return []
+  return characters.filter((c) => text.includes(`@${c.name}`))
+}
+
 /* ---------------- Icons (SVG, no emojis) ---------------- */
 function Svg({ children, className = "h-5 w-5" }: { children: ReactNode; className?: string }) {
   return (
@@ -111,6 +116,9 @@ const IconAlert = (p: IconProps) => (
 )
 const IconCheck = (p: IconProps) => (
   <Svg {...p}><path d="M20 6 9 17l-5-5" /></Svg>
+)
+const IconAt = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" /></Svg>
 )
 
 const NAV: { id: Tab; label: string; icon: (p: IconProps) => ReactNode }[] = [
@@ -273,7 +281,6 @@ function AppScreen({ session }: { session: Session }) {
   const [resolution, setResolution] = useState("720p")
   const [aspectRatio, setAspectRatio] = useState("16:9")
   const [duration, setDuration] = useState(5)
-  const [selectedCharacterId, setSelectedCharacterId] = useState("")
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [videos, setVideos] = useState<GeneratedVideo[]>([])
@@ -438,7 +445,8 @@ function AppScreen({ session }: { session: Session }) {
       formData.append("resolution", resolution)
       formData.append("aspectRatio", aspectRatio)
       formData.append("duration", String(duration))
-      if (selectedCharacterId) formData.append("characterId", selectedCharacterId)
+      const mentioned = findMentioned(prompt, characters)
+      if (mentioned[0]) formData.append("characterId", mentioned[0].id)
       if (image) formData.append("image", image)
       const res = await authFetch("/api/generate", { method: "POST", body: formData })
       const data = await res.json()
@@ -468,7 +476,6 @@ function AppScreen({ session }: { session: Session }) {
   }
 
   const isOutOfCredits = credits !== null && credits <= 0
-  const selectedCharacter = characters.find((c) => c.id === selectedCharacterId) || null
 
   function goTab(t: Tab) {
     setTab(t)
@@ -598,9 +605,6 @@ function AppScreen({ session }: { session: Session }) {
               duration={duration}
               setDuration={setDuration}
               characters={characters}
-              selectedCharacterId={selectedCharacterId}
-              setSelectedCharacterId={setSelectedCharacterId}
-              selectedCharacter={selectedCharacter}
               imagePreview={imagePreview}
               handleImageChange={handleImageChange}
               isGenerating={isGenerating}
@@ -651,9 +655,6 @@ function GenerateView(props: {
   duration: number
   setDuration: (v: number) => void
   characters: CharacterItem[]
-  selectedCharacterId: string
-  setSelectedCharacterId: (v: string) => void
-  selectedCharacter: CharacterItem | null
   imagePreview: string | null
   handleImageChange: (f: File | null) => void
   isGenerating: boolean
@@ -667,18 +668,72 @@ function GenerateView(props: {
 }) {
   const {
     prompt, setPrompt, resolution, setResolution, aspectRatio, setAspectRatio,
-    duration, setDuration, characters, selectedCharacterId, setSelectedCharacterId,
-    selectedCharacter, imagePreview, handleImageChange, isGenerating, isOutOfCredits,
-    error, onSubmit, onGoCharacters, videos, isLoadingVideos, onDeleteVideo,
+    duration, setDuration, characters, imagePreview, handleImageChange,
+    isGenerating, isOutOfCredits, error, onSubmit, onGoCharacters, videos,
+    isLoadingVideos, onDeleteVideo,
   } = props
 
   const [galleryFilter, setGalleryFilter] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const mentioned = findMentioned(prompt, characters)
 
   function addStyle(suffix: string) {
     const base = prompt.trim().replace(/[,\s]+$/, "")
     const next = base ? `${base}, ${suffix}` : suffix
     setPrompt(next.slice(0, MAX_PROMPT))
+  }
+
+  function detectMention(value: string, caret: number) {
+    const upto = value.slice(0, caret)
+    const at = upto.lastIndexOf("@")
+    if (at === -1) {
+      setMentionQuery(null)
+      return
+    }
+    const before = at === 0 ? " " : upto[at - 1]
+    const query = upto.slice(at + 1)
+    // Active only right after @ with no line break, and preceded by space/start.
+    if ((before === " " || before === "\n") && !query.includes("\n")) {
+      setMentionQuery(query)
+      setMentionStart(at)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  function handlePromptChange(value: string, caret: number) {
+    const v = value.slice(0, MAX_PROMPT)
+    setPrompt(v)
+    detectMention(v, Math.min(caret, v.length))
+  }
+
+  function insertMention(c: CharacterItem) {
+    const before = prompt.slice(0, mentionStart)
+    const after = prompt.slice(mentionStart + 1 + (mentionQuery?.length ?? 0))
+    const insert = `@${c.name} `
+    const next = (before + insert + after).slice(0, MAX_PROMPT)
+    setPrompt(next)
+    setMentionQuery(null)
+    const pos = Math.min((before + insert).length, next.length)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (el) {
+        el.focus()
+        el.setSelectionRange(pos, pos)
+      }
+    })
+  }
+
+  function appendMention(c: CharacterItem) {
+    const base = prompt.replace(/\s+$/, "")
+    const next = ((base ? base + " " : "") + `@${c.name} `).slice(0, MAX_PROMPT)
+    setPrompt(next)
+    setMentionQuery(null)
+    requestAnimationFrame(() => textareaRef.current?.focus())
   }
 
   async function handleDelete(id: string) {
@@ -690,7 +745,15 @@ function GenerateView(props: {
     }
   }
 
-  const shown = galleryFilter ? videos.filter((v) => v.characterId === galleryFilter) : videos
+  const mentionMatches =
+    mentionQuery === null
+      ? []
+      : characters.filter((c) => c.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+
+  const filterChar = characters.find((c) => c.id === galleryFilter) || null
+  const shown = filterChar
+    ? videos.filter((v) => (v.prompt || "").includes(`@${filterChar.name}`) || v.characterId === filterChar.id)
+    : videos
 
   return (
     <>
@@ -710,13 +773,85 @@ function GenerateView(props: {
             <label className="block text-sm font-medium text-neutral-300">Prompt</label>
             <span className="text-xs text-neutral-500">{prompt.length}/{MAX_PROMPT}</span>
           </div>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value.slice(0, MAX_PROMPT))}
-            placeholder="Contoh: Seekor kucing oranye berlari di padang bunga saat matahari terbenam, sinematik, slow motion..."
-            rows={4}
-            className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(e) => handlePromptChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              onKeyUp={(e) => detectMention(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length)}
+              onClick={(e) => detectMention(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length)}
+              onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
+              placeholder="Contoh: @Dinda sedang memarahi anaknya @Ucil di ruang tamu, sinematik..."
+              rows={4}
+              className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+            />
+            {mentionQuery !== null && mentionMatches.length > 0 && (
+              <div className="absolute z-20 left-0 right-0 mt-1 max-h-52 overflow-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
+                {mentionMatches.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      insertMention(c)
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/5"
+                  >
+                    {c.imageUrl ? (
+                      <img src={c.imageUrl} alt={c.name} className="h-8 w-8 rounded-md object-cover border border-neutral-700" />
+                    ) : (
+                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-neutral-800 text-neutral-500"><IconUsers className="h-4 w-4" /></span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium truncate">@{c.name}</span>
+                      {c.description && <span className="block text-[11px] text-neutral-500 truncate">{c.description}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Karakter (opsional)</label>
+          {characters.length === 0 ? (
+            <button
+              type="button"
+              onClick={onGoCharacters}
+              className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300"
+            >
+              <IconUsers className="h-4 w-4" /> Belum ada karakter — buat karakter konsisten dulu
+            </button>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {characters.map((c) => {
+                  const active = mentioned.some((m) => m.id === c.id)
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => appendMention(c)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                        active ? "border-indigo-500 bg-indigo-500/15 text-white" : "border-neutral-700 bg-neutral-950 text-neutral-300 hover:border-neutral-600"
+                      }`}
+                    >
+                      {c.imageUrl ? (
+                        <img src={c.imageUrl} alt={c.name} className="h-5 w-5 rounded-full object-cover" />
+                      ) : (
+                        <IconUsers className="h-3.5 w-3.5" />
+                      )}
+                      @{c.name}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="flex items-center gap-1 text-[11px] text-neutral-500 mt-1.5">
+                <IconAt className="h-3.5 w-3.5" /> Ketik <b className="text-neutral-300">@</b> di prompt atau klik nama untuk menyebut karakter. Bisa lebih dari satu, mis. “@Dinda memarahi @Ucil”.
+              </p>
+            </>
+          )}
         </div>
 
         <div>
@@ -734,38 +869,6 @@ function GenerateView(props: {
             ))}
           </div>
           <p className="text-[11px] text-neutral-500 mt-1.5">Klik untuk menambahkan kata kunci gaya ke prompt.</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Karakter (opsional)</label>
-          {characters.length === 0 ? (
-            <button
-              type="button"
-              onClick={onGoCharacters}
-              className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300"
-            >
-              <IconUsers className="h-4 w-4" /> Belum ada karakter — buat karakter konsisten dulu
-            </button>
-          ) : (
-            <div className="flex items-center gap-3">
-              {selectedCharacter?.imageUrl ? (
-                <img src={selectedCharacter.imageUrl} alt={selectedCharacter.name} className="h-11 w-11 rounded-lg object-cover border border-neutral-700" />
-              ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-500"><IconUsers className="h-5 w-5" /></div>
-              )}
-              <select
-                value={selectedCharacterId}
-                onChange={(e) => setSelectedCharacterId(e.target.value)}
-                className="flex-1 rounded-lg bg-neutral-950 border border-neutral-700 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Tanpa karakter</option>
-                {characters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <p className="text-[11px] text-neutral-500 mt-1.5">Pilih karakter agar wajahnya tetap konsisten (penguncian aktif penuh saat API asli tersambung).</p>
         </div>
 
         <div>
@@ -897,7 +1000,12 @@ function GenerateView(props: {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {shown.map((video) => {
-              const character = video.characterId ? characters.find((c) => c.id === video.characterId) : null
+              const promptChars = findMentioned(video.prompt || "", characters)
+              const badgeChars = promptChars.length > 0
+                ? promptChars
+                : video.characterId
+                ? characters.filter((c) => c.id === video.characterId)
+                : []
               return (
                 <div key={video.id} className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900 hover:border-neutral-700 transition">
                   {video.status === "processing" ? (
@@ -919,11 +1027,11 @@ function GenerateView(props: {
                   <div className="p-3 space-y-2">
                     <p className="text-sm text-neutral-200 line-clamp-2">{video.prompt}</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {character && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 rounded px-1.5 py-0.5">
-                          <IconUsers className="h-3 w-3" /> {character.name}
+                      {badgeChars.map((c) => (
+                        <span key={c.id} className="inline-flex items-center gap-1 text-[10px] font-medium bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 rounded px-1.5 py-0.5">
+                          <IconUsers className="h-3 w-3" /> {c.name}
                         </span>
-                      )}
+                      ))}
                       {video.resolution && <span className="text-[10px] font-medium bg-neutral-800 rounded px-1.5 py-0.5 text-neutral-300">{video.resolution}</span>}
                       {video.aspectRatio && <span className="text-[10px] font-medium bg-neutral-800 rounded px-1.5 py-0.5 text-neutral-300">{video.aspectRatio}</span>}
                       {video.duration && <span className="text-[10px] font-medium bg-neutral-800 rounded px-1.5 py-0.5 text-neutral-300">{video.duration}s</span>}
@@ -1037,7 +1145,7 @@ function CharacterManager({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Karakter</h1>
         <p className="text-sm text-neutral-400 mt-1">
-          Buat karakter dengan foto &amp; deskripsi agar tampil konsisten di setiap video. Cocok untuk drama pendek &amp; konten affiliate.
+          Buat karakter dengan foto &amp; deskripsi agar tampil konsisten di setiap video. Sebut mereka di prompt pakai <b className="text-neutral-300">@nama</b>. Cocok untuk drama pendek &amp; konten affiliate.
         </p>
       </div>
 
@@ -1048,7 +1156,7 @@ function CharacterManager({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Contoh: Dinda, host review produk"
+            placeholder="Contoh: Dinda (pakai nama singkat agar mudah di-@)"
             className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
@@ -1112,7 +1220,7 @@ function CharacterManager({
                   <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-800 text-neutral-500 shrink-0"><IconUsers className="h-6 w-6" /></div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate">{c.name}</p>
+                  <p className="text-sm font-semibold truncate">@{c.name}</p>
                   {c.description && <p className="text-xs text-neutral-400 line-clamp-2 mt-0.5">{c.description}</p>}
                   <button
                     onClick={() => handleDelete(c.id)}
