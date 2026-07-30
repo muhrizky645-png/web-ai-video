@@ -15,6 +15,10 @@ export async function POST(req: Request) {
 
     const formData = await req.formData()
     const prompt = formData.get("prompt")
+    const resolution = (formData.get("resolution") as string) || "720p"
+    const aspectRatio = (formData.get("aspectRatio") as string) || "16:9"
+    const durationRaw = formData.get("duration")
+    const duration = durationRaw ? parseInt(durationRaw as string, 10) : 5
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt wajib diisi." }, { status: 400 })
@@ -53,12 +57,41 @@ export async function POST(req: Request) {
 
     const videoUrl = DUMMY_VIDEO_URLS[Math.floor(Math.random() * DUMMY_VIDEO_URLS.length)]
 
+    // Simpan hasil ke histori (tabel videos) supaya galeri tetap ada saat halaman di-refresh.
+    const { data: videoRow, error: insertError } = await supabase
+      .from("videos")
+      .insert({
+        prompt,
+        video_url: videoUrl,
+        resolution,
+        aspect_ratio: aspectRatio,
+        duration,
+      })
+      .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at")
+      .single()
+
+    if (insertError || !videoRow) {
+      // Kalau gagal menyimpan histori, video tetap dikembalikan agar UX tidak terganggu.
+      return NextResponse.json({
+        id: crypto.randomUUID(),
+        prompt,
+        videoUrl,
+        resolution,
+        aspectRatio,
+        duration,
+        createdAt: new Date().toISOString(),
+        remainingCredits: updatedRow.balance,
+      })
+    }
+
     return NextResponse.json({
-      id: crypto.randomUUID(),
-      prompt,
-      videoUrl,
-      createdAt: new Date().toISOString(),
-      status: "success",
+      id: videoRow.id,
+      prompt: videoRow.prompt,
+      videoUrl: videoRow.video_url,
+      resolution: videoRow.resolution,
+      aspectRatio: videoRow.aspect_ratio,
+      duration: videoRow.duration,
+      createdAt: videoRow.created_at,
       remainingCredits: updatedRow.balance,
     })
   } catch (err) {
