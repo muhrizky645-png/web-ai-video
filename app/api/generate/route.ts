@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server"
 import { getSupabaseWithToken, getBearerToken } from "@/lib/supabaseClient"
-import { createPrediction } from "@/lib/replicate"
 
 export const dynamic = "force-dynamic"
 
-// Model video Replicate (WAN 2.2 Fast — cepat & murah).
-const T2V_MODEL = "wan-video/wan-2.2-t2v-fast" // teks -> video
-const I2V_MODEL = "wan-video/wan-2.2-i2v-fast" // gambar -> video
+// MODE DEMO: kembalikan video contoh (dummy) tanpa memanggil API berbayar.
+// Nanti bisa disambungkan lagi ke API video asli (mis. Replicate) via lib/replicate.ts.
+const SAMPLE_VIDEOS = [
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+]
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +32,6 @@ export async function POST(req: Request) {
     const aspectRatio = (formData.get("aspectRatio") as string) || "16:9"
     const durationRaw = formData.get("duration")
     const duration = durationRaw ? parseInt(durationRaw as string, 10) : 5
-    const imageFile = formData.get("image")
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt wajib diisi." }, { status: 400 })
@@ -45,26 +50,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kredit habis. Tidak bisa generate video." }, { status: 402 })
     }
 
-    // Susun input untuk model. Kalau ada gambar referensi -> pakai model image-to-video.
-    const input: Record<string, unknown> = { prompt }
-    let model = T2V_MODEL
-    if (imageFile && imageFile instanceof File && imageFile.size > 0) {
-      const buf = Buffer.from(await imageFile.arrayBuffer())
-      const dataUri = `data:${imageFile.type || "image/png"};base64,${buf.toString("base64")}`
-      input.image = dataUri
-      model = I2V_MODEL
-    }
-
-    // Mulai prediksi (async) di Replicate.
-    let prediction
-    try {
-      prediction = await createPrediction(model, input)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Gagal memulai generate."
-      return NextResponse.json({ error: `Gagal menghubungi Replicate: ${msg}` }, { status: 502 })
-    }
-
-    // Kurangi 1 kredit sebagai reservasi (dikembalikan kalau nanti gagal).
+    // Kurangi 1 kredit.
     const { data: updatedRow, error: updateError } = await supabase
       .from("credits")
       .update({ balance: creditRow.balance - 1, updated_at: new Date().toISOString() })
@@ -76,18 +62,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Gagal memperbarui kredit." }, { status: 500 })
     }
 
-    // Simpan baris video dengan status "processing".
+    // Pilih video contoh secara acak (mode demo).
+    const videoUrl = SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
+
     const { data: videoRow, error: insertError } = await supabase
       .from("videos")
       .insert({
         prompt,
-        video_url: null,
+        video_url: videoUrl,
         resolution,
         aspect_ratio: aspectRatio,
         duration,
         user_id: user.id,
-        status: "processing",
-        prediction_id: prediction.id,
+        status: "done",
+        prediction_id: null,
       })
       .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status")
       .single()

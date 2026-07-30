@@ -225,7 +225,7 @@ function AppScreen({ session }: { session: Session }) {
     }
   }, [authFetch])
 
-  // Cek status video yang masih diproses secara berkala.
+  // Cek status video yang masih diproses secara berkala (dipakai kalau nanti pakai API asli).
   const pollStatus = useCallback(
     (id: string) => {
       if (pollingRef.current.has(id)) return
@@ -336,7 +336,7 @@ function AppScreen({ session }: { session: Session }) {
           aspectRatio: data.aspectRatio,
           duration: data.duration,
           createdAt: data.createdAt,
-          status: data.status ?? "processing",
+          status: data.status ?? "done",
         },
         ...prev,
       ])
@@ -391,8 +391,8 @@ function AppScreen({ session }: { session: Session }) {
 
         {tab === "generate" && (
           <>
-            <div className="mb-6 rounded-lg bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-xs text-blue-200">
-              🎥 Terhubung ke <b>Replicate (WAN 2.2)</b> — video asli. Proses generate bisa memakan waktu ~1–2 menit, jadi mohon ditunggu ya.
+            <div className="mb-6 rounded-lg bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-xs text-yellow-200">
+              🎬 <b>Mode demo</b> — video yang muncul masih contoh (dummy) untuk menguji tampilan &amp; fitur. API video asli bisa disambungkan kapan saja nanti.
             </div>
 
             <form
@@ -501,7 +501,7 @@ function AppScreen({ session }: { session: Session }) {
                 {isGenerating && (
                   <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
                 )}
-                {isGenerating ? "Mengirim..." : "Generate Video"}
+                {isGenerating ? "Membuat..." : "Generate Video"}
               </button>
             </form>
 
