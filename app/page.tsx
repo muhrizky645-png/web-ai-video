@@ -14,6 +14,7 @@ type GeneratedVideo = {
   createdAt: string
   status?: string
   characterId?: string | null
+  favorite?: boolean
 }
 
 type CharacterItem = {
@@ -21,6 +22,8 @@ type CharacterItem = {
   name: string
   description?: string | null
   imageUrl?: string | null
+  imageUrls?: string[]
+  voiceUrl?: string | null
   createdAt: string
 }
 
@@ -30,6 +33,7 @@ const RESOLUTIONS = ["480p", "720p", "1080p"]
 const ASPECT_RATIOS = ["16:9", "9:16", "1:1"]
 const DURATIONS = [4, 5, 8, 10]
 const MAX_PROMPT = 500
+const MAX_CHAR_PHOTOS = 4
 
 const STYLE_PRESETS = [
   { id: "cinematic", label: "Sinematik", suffix: "gaya sinematik, pencahayaan dramatis, depth of field" },
@@ -119,6 +123,23 @@ const IconCheck = (p: IconProps) => (
 )
 const IconAt = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" /></Svg>
+)
+const IconMic = (p: IconProps) => (
+  <Svg {...p}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></Svg>
+)
+const IconStar = ({ className = "h-5 w-5", filled = false }: IconProps & { filled?: boolean }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill={filled ? "currentColor" : "none"}
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
 )
 
 const NAV: { id: Tab; label: string; icon: (p: IconProps) => ReactNode }[] = [
@@ -400,6 +421,18 @@ function AppScreen({ session }: { session: Session }) {
     if (res.ok) setVideos((prev) => prev.filter((v) => v.id !== id))
   }
 
+  async function handleToggleFavorite(id: string, favorite: boolean) {
+    setVideos((prev) => prev.map((v) => (v.id === id ? { ...v, favorite } : v)))
+    const res = await authFetch(`/api/videos/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite }),
+    })
+    if (!res.ok) {
+      setVideos((prev) => prev.map((v) => (v.id === id ? { ...v, favorite: !favorite } : v)))
+    }
+  }
+
   async function handleBuy(packageId: string) {
     setBuyingId(packageId)
     setBuyMessage(null)
@@ -462,6 +495,7 @@ function AppScreen({ session }: { session: Session }) {
           createdAt: data.createdAt,
           status: data.status ?? "done",
           characterId: data.characterId ?? null,
+          favorite: false,
         },
         ...prev,
       ])
@@ -615,6 +649,7 @@ function AppScreen({ session }: { session: Session }) {
               videos={videos}
               isLoadingVideos={isLoadingVideos}
               onDeleteVideo={handleDeleteVideo}
+              onToggleFavorite={handleToggleFavorite}
             />
           )}
 
@@ -665,15 +700,17 @@ function GenerateView(props: {
   videos: GeneratedVideo[]
   isLoadingVideos: boolean
   onDeleteVideo: (id: string) => Promise<void>
+  onToggleFavorite: (id: string, favorite: boolean) => void
 }) {
   const {
     prompt, setPrompt, resolution, setResolution, aspectRatio, setAspectRatio,
     duration, setDuration, characters, imagePreview, handleImageChange,
     isGenerating, isOutOfCredits, error, onSubmit, onGoCharacters, videos,
-    isLoadingVideos, onDeleteVideo,
+    isLoadingVideos, onDeleteVideo, onToggleFavorite,
   } = props
 
   const [galleryFilter, setGalleryFilter] = useState("")
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(0)
@@ -696,7 +733,6 @@ function GenerateView(props: {
     }
     const before = at === 0 ? " " : upto[at - 1]
     const query = upto.slice(at + 1)
-    // Active only right after @ with no line break, and preceded by space/start.
     if ((before === " " || before === "\n") && !query.includes("\n")) {
       setMentionQuery(query)
       setMentionStart(at)
@@ -751,9 +787,10 @@ function GenerateView(props: {
       : characters.filter((c) => c.name.toLowerCase().includes(mentionQuery.toLowerCase()))
 
   const filterChar = characters.find((c) => c.id === galleryFilter) || null
-  const shown = filterChar
+  let shown = filterChar
     ? videos.filter((v) => (v.prompt || "").includes(`@${filterChar.name}`) || v.characterId === filterChar.id)
     : videos
+  if (showFavoritesOnly) shown = shown.filter((v) => v.favorite)
 
   return (
     <>
@@ -802,10 +839,11 @@ function GenerateView(props: {
                     ) : (
                       <span className="flex h-8 w-8 items-center justify-center rounded-md bg-neutral-800 text-neutral-500"><IconUsers className="h-4 w-4" /></span>
                     )}
-                    <span className="min-w-0">
+                    <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium truncate">@{c.name}</span>
                       {c.description && <span className="block text-[11px] text-neutral-500 truncate">{c.description}</span>}
                     </span>
+                    {c.voiceUrl && <IconMic className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -843,6 +881,7 @@ function GenerateView(props: {
                         <IconUsers className="h-3.5 w-3.5" />
                       )}
                       @{c.name}
+                      {c.voiceUrl && <IconMic className="h-3 w-3 text-indigo-400" />}
                     </button>
                   )
                 })}
@@ -956,9 +995,18 @@ function GenerateView(props: {
       </form>
 
       <section className="mt-12">
-        <div className="flex items-center justify-between mb-4 gap-3">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">Galeri Hasil</h2>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFavoritesOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                showFavoritesOnly ? "border-amber-500 bg-amber-500/15 text-amber-300" : "border-neutral-700 bg-neutral-950 text-neutral-300 hover:border-neutral-600"
+              }`}
+            >
+              <IconStar className="h-3.5 w-3.5" filled={showFavoritesOnly} /> Favorit
+            </button>
             {characters.length > 0 && (
               <select
                 value={galleryFilter}
@@ -994,8 +1042,8 @@ function GenerateView(props: {
           </div>
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 py-12 text-center">
-            <IconUsers className="h-8 w-8 text-neutral-600" />
-            <p className="text-sm text-neutral-500 mt-3">Tidak ada video untuk karakter ini.</p>
+            <IconStar className="h-8 w-8 text-neutral-600" />
+            <p className="text-sm text-neutral-500 mt-3">{showFavoritesOnly ? "Belum ada video favorit." : "Tidak ada video untuk karakter ini."}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1041,6 +1089,15 @@ function GenerateView(props: {
                         {new Date(video.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
                       </span>
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => onToggleFavorite(video.id, !video.favorite)}
+                          className={`inline-flex items-center gap-1 text-xs font-medium ${
+                            video.favorite ? "text-amber-400" : "text-neutral-500 hover:text-amber-400"
+                          }`}
+                          aria-label={video.favorite ? "Hapus dari favorit" : "Tandai favorit"}
+                        >
+                          <IconStar className="h-3.5 w-3.5" filled={!!video.favorite} />
+                        </button>
                         {video.videoUrl && video.status !== "processing" && video.status !== "failed" && (
                           <a href={video.videoUrl} target="_blank" rel="noopener noreferrer" download className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300">
                             <IconDownload className="h-3.5 w-3.5" /> Unduh
@@ -1081,18 +1138,40 @@ function CharacterManager({
   const supabase = getSupabaseBrowser()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [previews, setPreviews] = useState<string[]>([])
+  const [voice, setVoice] = useState<File | null>(null)
+  const [voicePreview, setVoicePreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  function handleFile(f: File | null) {
-    setFile(f)
-    setPreview((prev) => {
+  function handleFiles(list: FileList | null) {
+    const arr = list ? Array.from(list).slice(0, MAX_CHAR_PHOTOS) : []
+    setPreviews((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p))
+      return arr.map((f) => URL.createObjectURL(f))
+    })
+    setFiles(arr)
+  }
+
+  function handleVoice(f: File | null) {
+    setVoice(f)
+    setVoicePreview((prev) => {
       if (prev) URL.revokeObjectURL(prev)
       return f ? URL.createObjectURL(f) : null
     })
+  }
+
+  function resetForm() {
+    setName("")
+    setDescription("")
+    setPreviews((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p))
+      return []
+    })
+    setFiles([])
+    handleVoice(null)
   }
 
   async function handleAdd(e: FormEvent) {
@@ -1104,24 +1183,38 @@ function CharacterManager({
     }
     setSaving(true)
     try {
-      let imageUrl: string | null = null
-      if (file) {
-        const safe = file.name.replace(/[^a-zA-Z0-9.]/g, "_")
-        const path = `${session.user.id}/${Date.now()}-${safe}`
-        const { error: upErr } = await supabase.storage.from("character-images").upload(path, file)
+      const imageUrls: string[] = []
+      for (const f of files) {
+        const safe = f.name.replace(/[^a-zA-Z0-9.]/g, "_")
+        const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
+        const { error: upErr } = await supabase.storage.from("character-images").upload(path, f)
         if (upErr) throw new Error("Gagal mengunggah foto: " + upErr.message)
-        imageUrl = supabase.storage.from("character-images").getPublicUrl(path).data.publicUrl
+        imageUrls.push(supabase.storage.from("character-images").getPublicUrl(path).data.publicUrl)
       }
+
+      let voiceUrl: string | null = null
+      if (voice) {
+        const safe = voice.name.replace(/[^a-zA-Z0-9.]/g, "_")
+        const path = `${session.user.id}/${Date.now()}-${safe}`
+        const { error: vErr } = await supabase.storage.from("character-voices").upload(path, voice)
+        if (vErr) throw new Error("Gagal mengunggah suara: " + vErr.message)
+        voiceUrl = supabase.storage.from("character-voices").getPublicUrl(path).data.publicUrl
+      }
+
       const res = await authFetch("/api/characters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), description: description.trim(), imageUrl }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+          imageUrl: imageUrls[0] ?? null,
+          imageUrls,
+          voiceUrl,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan karakter.")
-      setName("")
-      setDescription("")
-      handleFile(null)
+      resetForm()
       onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.")
@@ -1145,7 +1238,7 @@ function CharacterManager({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Karakter</h1>
         <p className="text-sm text-neutral-400 mt-1">
-          Buat karakter dengan foto &amp; deskripsi agar tampil konsisten di setiap video. Sebut mereka di prompt pakai <b className="text-neutral-300">@nama</b>. Cocok untuk drama pendek &amp; konten affiliate.
+          Buat karakter dengan foto &amp; suara agar tampil konsisten di setiap video. Sebut mereka di prompt pakai <b className="text-neutral-300">@nama</b>. Cocok untuk drama pendek &amp; konten affiliate.
         </p>
       </div>
 
@@ -1170,23 +1263,47 @@ function CharacterManager({
             className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
           />
         </div>
+
         <div>
-          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Foto referensi (opsional)</label>
-          {preview ? (
-            <div className="flex items-center gap-3">
-              <img src={preview} alt="Preview" className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
-              <button type="button" onClick={() => handleFile(null)} className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
-                <IconTrash className="h-4 w-4" /> Hapus foto
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Foto referensi (bisa beberapa, maks {MAX_CHAR_PHOTOS})</label>
+          {previews.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {previews.map((p, i) => (
+                  <img key={i} src={p} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
+                ))}
+              </div>
+              <button type="button" onClick={() => handleFiles(null)} className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
+                <IconTrash className="h-4 w-4" /> Hapus semua foto
               </button>
             </div>
           ) : (
             <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-400 hover:border-neutral-600">
               <IconImage className="h-5 w-5" />
-              <span>Pilih foto karakter</span>
-              <input type="file" accept="image/*" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} className="hidden" />
+              <span>Pilih foto karakter (boleh pilih beberapa sekaligus)</span>
+              <input type="file" accept="image/*" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
             </label>
           )}
-          <p className="text-[11px] text-neutral-500 mt-1.5">Foto jelas &amp; menghadap depan membuat karakter lebih mudah dikunci nanti.</p>
+          <p className="text-[11px] text-neutral-500 mt-1.5">Beberapa foto dari sudut berbeda (depan, samping) membuat karakter lebih mudah dikunci nanti.</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Sampel suara (opsional)</label>
+          {voicePreview ? (
+            <div className="space-y-2">
+              <audio src={voicePreview} controls className="w-full h-10" />
+              <button type="button" onClick={() => handleVoice(null)} className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
+                <IconTrash className="h-4 w-4" /> Hapus suara
+              </button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-400 hover:border-neutral-600">
+              <IconMic className="h-5 w-5" />
+              <span>Pilih file suara (mp3/wav)</span>
+              <input type="file" accept="audio/*" onChange={(e) => handleVoice(e.target.files?.[0] ?? null)} className="hidden" />
+            </label>
+          )}
+          <p className="text-[11px] text-neutral-500 mt-1.5">Rekaman suara jelas ~5–15 detik akan dipakai untuk menyamakan suara karakter saat API asli tersambung.</p>
         </div>
 
         {error && (
@@ -1212,26 +1329,42 @@ function CharacterManager({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {characters.map((c) => (
-              <div key={c.id} className="flex gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-                {c.imageUrl ? (
-                  <img src={c.imageUrl} alt={c.name} className="h-16 w-16 rounded-lg object-cover border border-neutral-700 shrink-0" />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-800 text-neutral-500 shrink-0"><IconUsers className="h-6 w-6" /></div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold truncate">@{c.name}</p>
-                  {c.description && <p className="text-xs text-neutral-400 line-clamp-2 mt-0.5">{c.description}</p>}
-                  <button
-                    onClick={() => handleDelete(c.id)}
-                    disabled={deletingId === c.id}
-                    className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
-                  >
-                    <IconTrash className="h-3.5 w-3.5" /> {deletingId === c.id ? "Menghapus..." : "Hapus"}
-                  </button>
+            {characters.map((c) => {
+              const photoCount = c.imageUrls && c.imageUrls.length > 0 ? c.imageUrls.length : c.imageUrl ? 1 : 0
+              return (
+                <div key={c.id} className="flex gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+                  {c.imageUrl ? (
+                    <img src={c.imageUrl} alt={c.name} className="h-16 w-16 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-800 text-neutral-500 shrink-0"><IconUsers className="h-6 w-6" /></div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold truncate">@{c.name}</p>
+                    {c.description && <p className="text-xs text-neutral-400 line-clamp-2 mt-0.5">{c.description}</p>}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {photoCount > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-neutral-800 rounded px-1.5 py-0.5 text-neutral-300">
+                          <IconImage className="h-3 w-3" /> {photoCount} foto
+                        </span>
+                      )}
+                      {c.voiceUrl && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 rounded px-1.5 py-0.5">
+                          <IconMic className="h-3 w-3" /> Suara
+                        </span>
+                      )}
+                    </div>
+                    {c.voiceUrl && <audio src={c.voiceUrl} controls className="w-full h-8 mt-2" />}
+                    <button
+                      onClick={() => handleDelete(c.id)}
+                      disabled={deletingId === c.id}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                    >
+                      <IconTrash className="h-3.5 w-3.5" /> {deletingId === c.id ? "Menghapus..." : "Hapus"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

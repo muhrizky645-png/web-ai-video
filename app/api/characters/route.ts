@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabase
       .from("characters")
-      .select("id, name, description, image_url, created_at")
+      .select("id, name, description, image_url, image_urls, voice_url, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -30,6 +30,8 @@ export async function GET(req: Request) {
       name: c.name,
       description: c.description,
       imageUrl: c.image_url,
+      imageUrls: Array.isArray(c.image_urls) ? c.image_urls : [],
+      voiceUrl: c.voice_url ?? null,
       createdAt: c.created_at,
     }))
 
@@ -54,7 +56,12 @@ export async function POST(req: Request) {
     const body = await req.json()
     const name = typeof body.name === "string" ? body.name.trim() : ""
     const description = typeof body.description === "string" ? body.description.trim() : ""
-    const imageUrl = typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : null
+    const imageUrls = Array.isArray(body.imageUrls)
+      ? body.imageUrls.filter((u: unknown): u is string => typeof u === "string" && u.length > 0)
+      : []
+    const imageUrl =
+      typeof body.imageUrl === "string" && body.imageUrl ? body.imageUrl : imageUrls[0] ?? null
+    const voiceUrl = typeof body.voiceUrl === "string" && body.voiceUrl ? body.voiceUrl : null
 
     if (!name) {
       return NextResponse.json({ error: "Nama karakter wajib diisi." }, { status: 400 })
@@ -62,8 +69,15 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase
       .from("characters")
-      .insert({ user_id: user.id, name, description, image_url: imageUrl })
-      .select("id, name, description, image_url, created_at")
+      .insert({
+        user_id: user.id,
+        name,
+        description,
+        image_url: imageUrl,
+        image_urls: imageUrls,
+        voice_url: voiceUrl,
+      })
+      .select("id, name, description, image_url, image_urls, voice_url, created_at")
       .single()
 
     if (error || !data) {
@@ -75,6 +89,8 @@ export async function POST(req: Request) {
       name: data.name,
       description: data.description,
       imageUrl: data.image_url,
+      imageUrls: Array.isArray(data.image_urls) ? data.image_urls : [],
+      voiceUrl: data.voice_url ?? null,
       createdAt: data.created_at,
     })
   } catch (err) {
