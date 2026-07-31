@@ -127,6 +127,9 @@ const IconAt = (p: IconProps) => (
 const IconMic = (p: IconProps) => (
   <Svg {...p}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></Svg>
 )
+const IconPlus = (p: IconProps) => (
+  <Svg {...p}><path d="M5 12h14" /><path d="M12 5v14" /></Svg>
+)
 const IconStar = ({ className = "h-5 w-5", filled = false }: IconProps & { filled?: boolean }) => (
   <svg
     className={className}
@@ -1146,13 +1149,22 @@ function CharacterManager({
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  function handleFiles(list: FileList | null) {
-    const arr = list ? Array.from(list).slice(0, MAX_CHAR_PHOTOS) : []
-    setPreviews((prev) => {
-      prev.forEach((p) => URL.revokeObjectURL(p))
-      return arr.map((f) => URL.createObjectURL(f))
-    })
-    setFiles(arr)
+  // Rebuild previews whenever the selected files change; revoke old URLs on cleanup.
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f))
+    setPreviews(urls)
+    return () => urls.forEach((u) => URL.revokeObjectURL(u))
+  }, [files])
+
+  function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return
+    setFiles((prev) => [...prev, ...Array.from(list)].slice(0, MAX_CHAR_PHOTOS))
+  }
+  function removeFileAt(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+  function clearFiles() {
+    setFiles([])
   }
 
   function handleVoice(f: File | null) {
@@ -1166,10 +1178,6 @@ function CharacterManager({
   function resetForm() {
     setName("")
     setDescription("")
-    setPreviews((prev) => {
-      prev.forEach((p) => URL.revokeObjectURL(p))
-      return []
-    })
     setFiles([])
     handleVoice(null)
   }
@@ -1266,25 +1274,43 @@ function CharacterManager({
 
         <div>
           <label className="block text-sm font-medium mb-1.5 text-neutral-300">Foto referensi (bisa beberapa, maks {MAX_CHAR_PHOTOS})</label>
-          {previews.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                {previews.map((p, i) => (
-                  <img key={i} src={p} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
-                ))}
+          <div className="flex flex-wrap gap-2">
+            {previews.map((p, i) => (
+              <div key={i} className="relative h-20 w-20">
+                <img src={p} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
+                <button
+                  type="button"
+                  onClick={() => removeFileAt(i)}
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-500"
+                  aria-label="Hapus foto"
+                >
+                  <IconClose className="h-3 w-3" />
+                </button>
               </div>
-              <button type="button" onClick={() => handleFiles(null)} className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
-                <IconTrash className="h-4 w-4" /> Hapus semua foto
-              </button>
-            </div>
-          ) : (
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-400 hover:border-neutral-600">
-              <IconImage className="h-5 w-5" />
-              <span>Pilih foto karakter (boleh pilih beberapa sekaligus)</span>
-              <input type="file" accept="image/*" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-            </label>
+            ))}
+            {files.length < MAX_CHAR_PHOTOS && (
+              <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 text-neutral-400 hover:border-indigo-500 hover:text-indigo-400 transition">
+                <IconPlus className="h-5 w-5" />
+                <span className="text-[10px]">Tambah</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    addFiles(e.target.files)
+                    e.target.value = ""
+                  }}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+          {files.length > 0 && (
+            <button type="button" onClick={clearFiles} className="mt-2 flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
+              <IconTrash className="h-4 w-4" /> Hapus semua foto
+            </button>
           )}
-          <p className="text-[11px] text-neutral-500 mt-1.5">Beberapa foto dari sudut berbeda (depan, samping) membuat karakter lebih mudah dikunci nanti.</p>
+          <p className="text-[11px] text-neutral-500 mt-1.5">Klik <b className="text-neutral-300">+ Tambah</b> untuk menambah foto satu per satu. Beberapa foto dari sudut berbeda (depan, samping) membuat karakter lebih mudah dikunci nanti.</p>
         </div>
 
         <div>
