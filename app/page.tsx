@@ -1614,4 +1614,171 @@ function BuyCredits({
         </p>
       </div>
 
-      <div className="mb-6 rounded-lg bg-amber-500/
+      <div className="mb-6 rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-xs text-amber-300">
+        Mode uji coba — pembayaran belum aktif, jadi kredit langsung ditambahkan tanpa bayar. Nanti akan disambungkan ke pembayaran asli (Midtrans/Xendit).
+      </div>
+
+      {buyMessage && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-sm text-emerald-300">
+          <IconCheck className="h-4 w-4 shrink-0" /> {buyMessage}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {packages.map((pkg) => (
+          <div
+            key={pkg.id}
+            className={`relative rounded-2xl border p-6 flex flex-col items-center text-center ${
+              pkg.highlight ? "border-indigo-500 bg-indigo-500/10" : "border-neutral-800 bg-neutral-900"
+            }`}
+          >
+            {pkg.highlight && (
+              <span className="absolute -top-3 rounded-full bg-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide">Populer</span>
+            )}
+            <span className="text-xs font-medium text-neutral-400">{pkg.label}</span>
+            <span className="mt-2 text-4xl font-bold">{pkg.credits}</span>
+            <span className="text-xs text-neutral-400 mb-3">kredit</span>
+            <span className="text-lg font-semibold mb-4">{pkg.price}</span>
+            <button
+              onClick={() => onBuy(pkg.id)}
+              disabled={buyingId !== null}
+              className={`w-full rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                pkg.highlight ? "bg-indigo-600 hover:bg-indigo-500" : "bg-neutral-800 border border-neutral-700 hover:bg-neutral-700"
+              }`}
+            >
+              {buyingId === pkg.id ? "Memproses..." : "Beli"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* ---------------- Profile ---------------- */
+function Profile({
+  session,
+  credits,
+  onLogout,
+}: {
+  session: Session
+  credits: number | null
+  onLogout: () => void
+}) {
+  const supabase = getSupabaseBrowser()
+  const email = session.user.email ?? "Akun"
+  const createdAt = session.user.created_at
+    ? new Date(session.user.created_at).toLocaleDateString("id-ID", { dateStyle: "long" })
+    : "-"
+
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null)
+
+  async function handleChangePassword(e: FormEvent) {
+    e.preventDefault()
+    setPwError(null)
+    setPwSuccess(null)
+    if (newPassword.length < 6) {
+      setPwError("Password minimal 6 karakter.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("Konfirmasi password tidak cocok.")
+      return
+    }
+    setSaving(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      setPwSuccess("Password berhasil diubah!")
+      setNewPassword("")
+      setConfirmPassword("")
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : "Gagal mengubah password.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Profil</h1>
+        <p className="text-sm text-neutral-400 mt-1">Kelola akun dan keamanan kamu.</p>
+      </div>
+
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+        <h2 className="text-sm font-semibold mb-4">Info Akun</h2>
+        <dl className="space-y-3 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-neutral-400">Email</dt>
+            <dd className="font-medium">{email}</dd>
+          </div>
+          <div className="flex justify-between items-center">
+            <dt className="text-neutral-400">Saldo kredit</dt>
+            <dd className="font-medium inline-flex items-center gap-1"><IconZap className="h-4 w-4 text-amber-400" /> {credits === null ? "..." : credits}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-neutral-400">Bergabung sejak</dt>
+            <dd className="font-medium">{createdAt}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <form onSubmit={handleChangePassword} className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 space-y-4">
+        <h2 className="text-sm font-semibold">Ganti Password</h2>
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Password baru</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Minimal 6 karakter"
+            className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Konfirmasi password baru</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Ulangi password baru"
+            className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+        {pwError && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-300">{pwError}</div>
+        )}
+        {pwSuccess && (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300">
+            <IconCheck className="h-4 w-4 shrink-0" /> {pwSuccess}
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50 transition"
+        >
+          {saving ? "Menyimpan..." : "Simpan Password Baru"}
+        </button>
+      </form>
+
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Keluar dari akun</h2>
+          <p className="text-xs text-neutral-400 mt-1">Kamu perlu login lagi untuk masuk.</p>
+        </div>
+        <button
+          onClick={onLogout}
+          className="inline-flex items-center gap-2 rounded-lg bg-red-600/90 hover:bg-red-600 px-5 py-2.5 text-sm font-semibold transition"
+        >
+          <IconLogout className="h-4 w-4" /> Keluar
+        </button>
+      </div>
+    </section>
+  )
+}
