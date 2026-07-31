@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     const { w, h } = dims(aspectRatio)
     const seed = Math.random().toString(36).slice(2, 10)
-    const imageUrl = `https://picsum.photos/seed/${seed}/${w}/${h}`
+    const imageUrl = "https://picsum.photos/seed/" + seed + "/" + w + "/" + h
 
     const { data: row, error: insertError } = await supabase
       .from("images")
