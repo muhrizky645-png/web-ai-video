@@ -1528,3 +1528,339 @@ function CharacterManager({
         <div>
           <label className="block text-sm font-medium mb-1.5 text-neutral-300">Foto referensi (bisa beberapa, maks {MAX_CHAR_PHOTOS})</label>
           <div className="flex flex-wrap gap-2">
+            {photos.map((p, i) => (
+              <div key={p.url} className="relative h-20 w-20">
+                <img src={p.url} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
+                <button
+                  type="button"
+                  onClick={() => removeFileAt(i)}
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-500"
+                  aria-label="Hapus foto"
+                >
+                  <IconClose className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {photos.length < MAX_CHAR_PHOTOS && (
+              <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 text-neutral-400 hover:border-indigo-500 hover:text-indigo-400 transition">
+                <IconPlus className="h-5 w-5" />
+                <span className="text-[10px]">Tambah</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    addFiles(e.target.files)
+                    e.target.value = ""
+                  }}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+          {photos.length > 0 && (
+            <button type="button" onClick={clearFiles} className="mt-2 flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
+              <IconTrash className="h-4 w-4" /> Hapus semua foto
+            </button>
+          )}
+          <p className="text-[11px] text-neutral-500 mt-1.5">Klik <b className="text-neutral-300">+ Tambah</b> untuk menambah foto satu per satu. Beberapa foto dari sudut berbeda (depan, samping) membuat karakter lebih mudah dikunci nanti.</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Sampel suara (opsional)</label>
+          {voicePreview ? (
+            <div className="space-y-2">
+              <audio src={voicePreview} controls className="w-full h-10" />
+              <button type="button" onClick={() => handleVoice(null)} className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
+                <IconTrash className="h-4 w-4" /> Hapus suara
+              </button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-400 hover:border-neutral-600">
+              <IconMic className="h-5 w-5" />
+              <span>Pilih file suara (mp3/wav)</span>
+              <input type="file" accept="audio/*" onChange={(e) => handleVoice(e.target.files?.[0] ?? null)} className="hidden" />
+            </label>
+          )}
+          <p className="text-[11px] text-neutral-500 mt-1.5">Rekaman suara jelas ~5–15 detik akan dipakai untuk menyamakan suara karakter saat API asli tersambung.</p>
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-300">{error}</div>
+        )}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 py-3 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50 transition"
+        >
+          {saving && <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+          {saving ? "Menyimpan..." : "Simpan Karakter"}
+        </button>
+      </form>
+
+      <div>
+        <h3 className="text-sm font-semibold mb-3">Karakter Kamu {characters.length > 0 && `(${characters.length})`}</h3>
+        {characters.length === 0 ? (
+          <div className="flex flex-col items-center rounded-xl border border-dashed border-neutral-800 bg-neutral-900/40 py-10 text-center">
+            <IconUsers className="h-8 w-8 text-neutral-600" />
+            <p className="text-sm text-neutral-500 mt-3">Belum ada karakter. Tambahkan karakter pertamamu di atas.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {characters.map((c) => {
+              const photoCount = c.imageUrls && c.imageUrls.length > 0 ? c.imageUrls.length : c.imageUrl ? 1 : 0
+              return (
+                <div key={c.id} className="flex gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+                  {c.imageUrl ? (
+                    <img src={c.imageUrl} alt={c.name} className="h-16 w-16 rounded-lg object-cover border border-neutral-700 shrink-0" />
+                  ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-800 text-neutral-500 shrink-0"><IconUsers className="h-6 w-6" /></div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold truncate">@{c.name}</p>
+                    {c.description && <p className="text-xs text-neutral-400 line-clamp-2 mt-0.5">{c.description}</p>}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {photoCount > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-neutral-800 rounded px-1.5 py-0.5 text-neutral-300">
+                          <IconImage className="h-3 w-3" /> {photoCount} foto
+                        </span>
+                      )}
+                      {c.voiceUrl && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-indigo-500/20 border border-indigo-500/40 text-indigo-200 rounded px-1.5 py-0.5">
+                          <IconMic className="h-3 w-3" /> Suara
+                        </span>
+                      )}
+                    </div>
+                    {c.voiceUrl && <audio src={c.voiceUrl} controls className="w-full h-8 mt-2" />}
+                    <button
+                      onClick={() => handleDelete(c.id)}
+                      disabled={deletingId === c.id}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                    >
+                      <IconTrash className="h-3.5 w-3.5" /> {deletingId === c.id ? "Menghapus..." : "Hapus"}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/* ---------------- Buy credits ---------------- */
+function BuyCredits({
+  packages,
+  credits,
+  buyingId,
+  buyMessage,
+  onBuy,
+}: {
+  packages: typeof CREDIT_PACKAGES
+  credits: number | null
+  buyingId: string | null
+  buyMessage: string | null
+  onBuy: (id: string) => void
+}) {
+  return (
+    <section>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Beli Kredit</h1>
+        <p className="text-sm text-neutral-400 mt-1">
+          Saldo saat ini: <span className="font-semibold text-white">{credits === null ? "..." : credits} kredit</span>. 1 kredit = 1 kali generate video.
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-xs text-amber-300">
+        Mode uji coba — pembayaran belum aktif, jadi kredit langsung ditambahkan tanpa bayar. Nanti akan disambungkan ke pembayaran asli (Midtrans/Xendit).
+      </div>
+
+      {buyMessage && (
+        <div className="mb-6 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-sm text-emerald-300">
+          <IconCheck className="h-4 w-4 shrink-0" /> {buyMessage}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {packages.map((pkg) => (
+          <div
+            key={pkg.id}
+            className={`relative rounded-2xl border p-6 flex flex-col items-center text-center ${
+              pkg.highlight ? "border-indigo-500 bg-indigo-500/10" : "border-neutral-800 bg-neutral-900"
+            }`}
+          >
+            {pkg.highlight && (
+              <span className="absolute -top-3 rounded-full bg-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide">Populer</span>
+            )}
+            <span className="text-xs font-medium text-neutral-400">{pkg.label}</span>
+            <span className="mt-2 text-4xl font-bold">{pkg.credits}</span>
+            <span className="text-xs text-neutral-400 mb-3">kredit</span>
+            <span className="text-lg font-semibold mb-4">{pkg.price}</span>
+            <button
+              onClick={() => onBuy(pkg.id)}
+              disabled={buyingId !== null}
+              className={`w-full rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                pkg.highlight ? "bg-indigo-600 hover:bg-indigo-500" : "bg-neutral-800 border border-neutral-700 hover:bg-neutral-700"
+              }`}
+            >
+              {buyingId === pkg.id ? "Memproses..." : "Beli"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* ---------------- Profile ---------------- */
+function Profile({
+  session,
+  credits,
+  onLogout,
+}: {
+  session: Session
+  credits: number | null
+  onLogout: () => void
+}) {
+  const supabase = getSupabaseBrowser()
+  const email = session.user.email ?? "Akun"
+  const createdAt = session.user.created_at
+    ? new Date(session.user.created_at).toLocaleDateString("id-ID", { dateStyle: "long" })
+    : "-"
+
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showNew, setShowNew] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null)
+
+  async function handleChangePassword(e: FormEvent) {
+    e.preventDefault()
+    setPwError(null)
+    setPwSuccess(null)
+    if (newPassword.length < 6) {
+      setPwError("Password minimal 6 karakter.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("Konfirmasi password tidak cocok.")
+      return
+    }
+    setSaving(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      setPwSuccess("Password berhasil diubah!")
+      setNewPassword("")
+      setConfirmPassword("")
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : "Gagal mengubah password.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Profil</h1>
+        <p className="text-sm text-neutral-400 mt-1">Kelola akun dan keamanan kamu.</p>
+      </div>
+
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+        <h2 className="text-sm font-semibold mb-4">Info Akun</h2>
+        <dl className="space-y-3 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-neutral-400">Email</dt>
+            <dd className="font-medium">{email}</dd>
+          </div>
+          <div className="flex justify-between items-center">
+            <dt className="text-neutral-400">Saldo kredit</dt>
+            <dd className="font-medium inline-flex items-center gap-1"><IconZap className="h-4 w-4 text-amber-400" /> {credits === null ? "..." : credits}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-neutral-400">Bergabung sejak</dt>
+            <dd className="font-medium">{createdAt}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <form onSubmit={handleChangePassword} className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 space-y-4">
+        <h2 className="text-sm font-semibold">Ganti Password</h2>
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Password baru</label>
+          <div className="relative">
+            <input
+              type={showNew ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Minimal 6 karakter"
+              className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew((v) => !v)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500 hover:text-neutral-300"
+              aria-label={showNew ? "Sembunyikan password" : "Lihat password"}
+            >
+              {showNew ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Konfirmasi password baru</label>
+          <div className="relative">
+            <input
+              type={showConfirm ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Ulangi password baru"
+              className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm((v) => !v)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500 hover:text-neutral-300"
+              aria-label={showConfirm ? "Sembunyikan password" : "Lihat password"}
+            >
+              {showConfirm ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+        {pwError && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-300">{pwError}</div>
+        )}
+        {pwSuccess && (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300">
+            <IconCheck className="h-4 w-4 shrink-0" /> {pwSuccess}
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50 transition"
+        >
+          {saving ? "Menyimpan..." : "Simpan Password Baru"}
+        </button>
+      </form>
+
+      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Keluar dari akun</h2>
+          <p className="text-xs text-neutral-400 mt-1">Kamu perlu login lagi untuk masuk.</p>
+        </div>
+        <button
+          onClick={onLogout}
+          className="inline-flex items-center gap-2 rounded-lg bg-red-600/90 hover:bg-red-600 px-5 py-2.5 text-sm font-semibold transition"
+        >
+          <IconLogout className="h-4 w-4" /> Keluar
+        </button>
+      </div>
+    </section>
+  )
+}
