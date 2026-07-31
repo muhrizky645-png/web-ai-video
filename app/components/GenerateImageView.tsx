@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { ASPECT_RATIOS, IMAGE_STYLES, MAX_PROMPT, type GeneratedImage } from "@/lib/app"
 import { IconAlert, IconDownload, IconImage, IconSparkles, IconStar, IconTrash } from "./icons"
 
