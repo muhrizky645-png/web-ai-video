@@ -130,6 +130,15 @@ const IconMic = (p: IconProps) => (
 const IconPlus = (p: IconProps) => (
   <Svg {...p}><path d="M5 12h14" /><path d="M12 5v14" /></Svg>
 )
+const IconArrowRight = (p: IconProps) => (
+  <Svg {...p}><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></Svg>
+)
+const IconArrowLeft = (p: IconProps) => (
+  <Svg {...p}><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></Svg>
+)
+const IconPlay = (p: IconProps) => (
+  <Svg {...p}><polygon points="6 3 20 12 6 21 6 3" /></Svg>
+)
 const IconStar = ({ className = "h-5 w-5", filled = false }: IconProps & { filled?: boolean }) => (
   <svg
     className={className}
@@ -156,6 +165,7 @@ const NAV: { id: Tab; label: string; icon: (p: IconProps) => ReactNode }[] = [
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
+  const [showAuth, setShowAuth] = useState(false)
 
   useEffect(() => {
     const supabase = getSupabaseBrowser()
@@ -177,12 +187,178 @@ export default function Home() {
     )
   }
 
-  if (!session) return <AuthScreen />
-  return <AppScreen session={session} />
+  if (session) return <AppScreen session={session} />
+  if (showAuth) return <AuthScreen onBack={() => setShowAuth(false)} />
+  return <LandingScreen onStart={() => setShowAuth(true)} />
+}
+
+/* ---------------- Landing (pengunjung belum login) ---------------- */
+function LandingScreen({ onStart }: { onStart: () => void }) {
+  const features: { icon: (p: IconProps) => ReactNode; title: string; desc: string }[] = [
+    { icon: IconSparkles, title: "Teks jadi Video", desc: "Tulis prompt, AI ubah jadi video sinematik dalam hitungan menit." },
+    { icon: IconImage, title: "Gambar jadi Video", desc: "Unggah satu foto, jadikan video bergerak yang hidup." },
+    { icon: IconUsers, title: "Karakter Konsisten", desc: "Kunci wajah karakter agar tetap sama di setiap adegan, cukup sebut @nama." },
+    { icon: IconMic, title: "Suara Karakter", desc: "Tambahkan sampel suara agar karakter terdengar konsisten." },
+    { icon: IconFilm, title: "Berbagai Format", desc: "Pilih resolusi, rasio TikTok/YouTube, dan durasi sesuai kebutuhan." },
+    { icon: IconDownload, title: "Galeri & Unduh", desc: "Simpan hasil ke galeri, tandai favorit, dan unduh kapan saja." },
+  ]
+  const steps = [
+    { n: "1", title: "Tulis atau unggah", desc: "Ketik ide dalam prompt atau unggah gambar referensi." },
+    { n: "2", title: "Pilih gaya & karakter", desc: "Sebut karakter pakai @nama, pilih gaya dan platform." },
+    { n: "3", title: "Generate & unduh", desc: "Klik generate, tunggu sebentar, videomu siap diunduh." },
+  ]
+  const samples = [
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  ]
+
+  return (
+    <div className="min-h-screen bg-neutral-950 text-white">
+      {/* Nav */}
+      <header className="sticky top-0 z-30 border-b border-neutral-800/70 bg-neutral-950/80 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-5 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600">
+              <IconFilm className="h-5 w-5 text-white" />
+            </div>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold">AI Video</p>
+              <p className="text-[11px] text-neutral-500">Generator</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onStart} className="hidden sm:inline-flex text-sm font-medium text-neutral-300 hover:text-white px-3 py-2">
+              Masuk
+            </button>
+            <button
+              onClick={onStart}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold hover:bg-indigo-500 transition"
+            >
+              Coba Gratis <IconArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,rgba(79,70,229,0.25),transparent)]" />
+        <div className="relative mx-auto max-w-4xl px-5 pt-20 pb-16 text-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
+            <IconSparkles className="h-3.5 w-3.5" /> Video AI untuk kreator &amp; bisnis
+          </span>
+          <h1 className="mt-6 text-4xl sm:text-5xl font-bold tracking-tight leading-tight">
+            Ubah ide jadi <span className="text-indigo-400">video memukau</span> dalam hitungan menit
+          </h1>
+          <p className="mt-5 text-base sm:text-lg text-neutral-400 max-w-2xl mx-auto">
+            Buat video dari teks atau gambar, dengan karakter yang konsisten di setiap adegan. Cocok untuk drama pendek, konten affiliate, dan iklan produk.
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={onStart}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold hover:bg-indigo-500 transition"
+            >
+              <IconSparkles className="h-4 w-4" /> Coba Gratis Sekarang
+            </button>
+            <a
+              href="#contoh"
+              className="inline-flex items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900 px-6 py-3 text-sm font-semibold hover:border-neutral-600 transition"
+            >
+              <IconPlay className="h-4 w-4" /> Lihat Contoh
+            </a>
+          </div>
+          <p className="mt-4 text-xs text-neutral-500">Gratis untuk memulai · Tanpa kartu kredit · Dapat 20 kredit saat daftar</p>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-5 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Semua yang kamu butuhkan</h2>
+          <p className="mt-3 text-neutral-400">Fitur lengkap untuk membuat video yang konsisten dan profesional.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {features.map((f) => {
+            const Icon = f.icon
+            return (
+              <div key={f.title} className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 hover:border-neutral-700 transition">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold">{f.title}</h3>
+                <p className="mt-1.5 text-sm text-neutral-400">{f.desc}</p>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Contoh hasil */}
+      <section id="contoh" className="mx-auto max-w-6xl px-5 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Contoh hasil</h2>
+          <p className="mt-3 text-neutral-400">Beberapa contoh video yang bisa kamu buat.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {samples.map((src) => (
+            <div key={src} className="rounded-2xl overflow-hidden border border-neutral-800 bg-neutral-900">
+              <video src={src} controls className="w-full aspect-video bg-black" />
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-center text-xs text-neutral-500">Contoh di atas adalah video demo untuk menggambarkan tampilan galeri.</p>
+      </section>
+
+      {/* Cara kerja */}
+      <section className="mx-auto max-w-6xl px-5 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Cara kerjanya</h2>
+          <p className="mt-3 text-neutral-400">Hanya tiga langkah mudah.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {steps.map((s) => (
+            <div key={s.n} className="text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-lg font-bold">{s.n}</div>
+              <h3 className="mt-4 text-base font-semibold">{s.title}</h3>
+              <p className="mt-1.5 text-sm text-neutral-400">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="mx-auto max-w-4xl px-5 py-16">
+        <div className="relative overflow-hidden rounded-3xl border border-indigo-500/30 bg-gradient-to-br from-indigo-600/20 to-neutral-900 p-10 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Siap membuat video pertamamu?</h2>
+          <p className="mt-3 text-neutral-300 max-w-xl mx-auto">Daftar gratis sekarang dan dapatkan 20 kredit untuk mulai membuat video.</p>
+          <button
+            onClick={onStart}
+            className="mt-7 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold hover:bg-indigo-500 transition"
+          >
+            <IconSparkles className="h-4 w-4" /> Mulai Gratis
+          </button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-neutral-800">
+        <div className="mx-auto max-w-6xl px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-600">
+              <IconFilm className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-sm font-medium">AI Video Generator</span>
+          </div>
+          <p className="text-xs text-neutral-500">© 2026 AI Video Generator. Semua hak dilindungi.</p>
+        </div>
+      </footer>
+    </div>
+  )
 }
 
 /* ---------------- Auth screen ---------------- */
-function AuthScreen() {
+function AuthScreen({ onBack }: { onBack?: () => void }) {
   const supabase = getSupabaseBrowser()
   const [mode, setMode] = useState<"login" | "signup">("login")
   const [email, setEmail] = useState("")
@@ -218,6 +394,14 @@ function AuthScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-950 text-white px-5">
       <div className="w-full max-w-sm">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mb-6 inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white"
+          >
+            <IconArrowLeft className="h-4 w-4" /> Kembali ke beranda
+          </button>
+        )}
         <div className="flex flex-col items-center text-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 mb-4">
             <IconFilm className="h-6 w-6 text-white" />
@@ -979,7 +1163,7 @@ function GenerateView(props: {
         )}
         {isOutOfCredits && !error && (
           <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-2 text-sm text-amber-300">
-            Kredit kamu sudah habis. Buka menu \"Beli Kredit\" untuk menambah.
+            Kredit kamu sudah habis. Buka menu Beli Kredit untuk menambah.
           </div>
         )}
 
@@ -1430,171 +1614,4 @@ function BuyCredits({
         </p>
       </div>
 
-      <div className="mb-6 rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-xs text-amber-300">
-        Mode uji coba &mdash; pembayaran belum aktif, jadi kredit langsung ditambahkan tanpa bayar. Nanti akan disambungkan ke pembayaran asli (Midtrans/Xendit).
-      </div>
-
-      {buyMessage && (
-        <div className="mb-6 flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-sm text-emerald-300">
-          <IconCheck className="h-4 w-4 shrink-0" /> {buyMessage}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {packages.map((pkg) => (
-          <div
-            key={pkg.id}
-            className={`relative rounded-2xl border p-6 flex flex-col items-center text-center ${
-              pkg.highlight ? "border-indigo-500 bg-indigo-500/10" : "border-neutral-800 bg-neutral-900"
-            }`}
-          >
-            {pkg.highlight && (
-              <span className="absolute -top-3 rounded-full bg-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide">Populer</span>
-            )}
-            <span className="text-xs font-medium text-neutral-400">{pkg.label}</span>
-            <span className="mt-2 text-4xl font-bold">{pkg.credits}</span>
-            <span className="text-xs text-neutral-400 mb-3">kredit</span>
-            <span className="text-lg font-semibold mb-4">{pkg.price}</span>
-            <button
-              onClick={() => onBuy(pkg.id)}
-              disabled={buyingId !== null}
-              className={`w-full rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
-                pkg.highlight ? "bg-indigo-600 hover:bg-indigo-500" : "bg-neutral-800 border border-neutral-700 hover:bg-neutral-700"
-              }`}
-            >
-              {buyingId === pkg.id ? "Memproses..." : "Beli"}
-            </button>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-/* ---------------- Profile ---------------- */
-function Profile({
-  session,
-  credits,
-  onLogout,
-}: {
-  session: Session
-  credits: number | null
-  onLogout: () => void
-}) {
-  const supabase = getSupabaseBrowser()
-  const email = session.user.email ?? "Akun"
-  const createdAt = session.user.created_at
-    ? new Date(session.user.created_at).toLocaleDateString("id-ID", { dateStyle: "long" })
-    : "-"
-
-  const [newPassword, setNewPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [pwError, setPwError] = useState<string | null>(null)
-  const [pwSuccess, setPwSuccess] = useState<string | null>(null)
-
-  async function handleChangePassword(e: FormEvent) {
-    e.preventDefault()
-    setPwError(null)
-    setPwSuccess(null)
-    if (newPassword.length < 6) {
-      setPwError("Password minimal 6 karakter.")
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setPwError("Konfirmasi password tidak cocok.")
-      return
-    }
-    setSaving(true)
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword })
-      if (error) throw error
-      setPwSuccess("Password berhasil diubah!")
-      setNewPassword("")
-      setConfirmPassword("")
-    } catch (err) {
-      setPwError(err instanceof Error ? err.message : "Gagal mengubah password.")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Profil</h1>
-        <p className="text-sm text-neutral-400 mt-1">Kelola akun dan keamanan kamu.</p>
-      </div>
-
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-        <h2 className="text-sm font-semibold mb-4">Info Akun</h2>
-        <dl className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-neutral-400">Email</dt>
-            <dd className="font-medium">{email}</dd>
-          </div>
-          <div className="flex justify-between items-center">
-            <dt className="text-neutral-400">Saldo kredit</dt>
-            <dd className="font-medium inline-flex items-center gap-1"><IconZap className="h-4 w-4 text-amber-400" /> {credits === null ? "..." : credits}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-neutral-400">Bergabung sejak</dt>
-            <dd className="font-medium">{createdAt}</dd>
-          </div>
-        </dl>
-      </div>
-
-      <form onSubmit={handleChangePassword} className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 space-y-4">
-        <h2 className="text-sm font-semibold">Ganti Password</h2>
-        <div>
-          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Password baru</label>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="Minimal 6 karakter"
-            className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1.5 text-neutral-300">Konfirmasi password baru</label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Ulangi password baru"
-            className="w-full rounded-lg bg-neutral-950 border border-neutral-700 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        {pwError && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-300">{pwError}</div>
-        )}
-        {pwSuccess && (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300">
-            <IconCheck className="h-4 w-4 shrink-0" /> {pwSuccess}
-          </div>
-        )}
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50 transition"
-        >
-          {saving ? "Menyimpan..." : "Simpan Password Baru"}
-        </button>
-      </form>
-
-      <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold">Keluar dari akun</h2>
-          <p className="text-xs text-neutral-400 mt-1">Kamu perlu login lagi untuk masuk.</p>
-        </div>
-        <button
-          onClick={onLogout}
-          className="inline-flex items-center gap-2 rounded-lg bg-red-600/90 hover:bg-red-600 px-5 py-2.5 text-sm font-semibold transition"
-        >
-          <IconLogout className="h-4 w-4" /> Keluar
-        </button>
-      </div>
-    </section>
-  )
-}
+      <div className="mb-6 rounded-lg bg-amber-500/
