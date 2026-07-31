@@ -34,6 +34,8 @@ export async function POST(req: Request) {
     const duration = durationRaw ? parseInt(durationRaw as string, 10) : 5
     const characterIdRaw = formData.get("characterId")
     const characterId = typeof characterIdRaw === "string" && characterIdRaw ? characterIdRaw : null
+    const projectIdRaw = formData.get("projectId")
+    const projectId = typeof projectIdRaw === "string" && projectIdRaw ? projectIdRaw : null
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt wajib diisi." }, { status: 400 })
@@ -52,7 +54,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Kredit habis. Tidak bisa generate video." }, { status: 402 })
     }
 
-    // Kurangi 1 kredit.
     const { data: updatedRow, error: updateError } = await supabase
       .from("credits")
       .update({ balance: creditRow.balance - 1, updated_at: new Date().toISOString() })
@@ -64,7 +65,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Gagal memperbarui kredit." }, { status: 500 })
     }
 
-    // Pilih video contoh secara acak (mode demo).
     const videoUrl = SAMPLE_VIDEOS[Math.floor(Math.random() * SAMPLE_VIDEOS.length)]
 
     const { data: videoRow, error: insertError } = await supabase
@@ -79,6 +79,7 @@ export async function POST(req: Request) {
         status: "done",
         prediction_id: null,
         character_id: characterId,
+        project_id: projectId,
       })
       .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status, character_id")
       .single()
@@ -99,7 +100,7 @@ export async function POST(req: Request) {
       characterId: videoRow.character_id,
       remainingCredits: updatedRow.balance,
     })
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "Gagal memproses permintaan." }, { status: 500 })
   }
 }

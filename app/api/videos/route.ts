@@ -15,13 +15,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Sesi tidak valid." }, { status: 401 })
     }
 
-    const { data, error } = await supabase
+    const projectId = new URL(req.url).searchParams.get("projectId")
+    let query = supabase
       .from("videos")
       .select("id, prompt, video_url, resolution, aspect_ratio, duration, created_at, status, character_id, favorite")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50)
+    if (projectId) query = query.eq("project_id", projectId)
 
+    const { data, error } = await query
     if (error) {
       return NextResponse.json({ error: "Gagal memuat histori video." }, { status: 500 })
     }
@@ -40,7 +43,7 @@ export async function GET(req: Request) {
     }))
 
     return NextResponse.json({ videos })
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "Konfigurasi server belum lengkap." }, { status: 500 })
   }
 }
