@@ -1127,6 +1127,8 @@ function GenerateView(props: {
 }
 
 /* ---------------- Characters ---------------- */
+type PhotoItem = { file: File; url: string }
+
 function CharacterManager({
   session,
   authFetch,
@@ -1141,30 +1143,36 @@ function CharacterManager({
   const supabase = getSupabaseBrowser()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [files, setFiles] = useState<File[]>([])
-  const [previews, setPreviews] = useState<string[]>([])
+  const [photos, setPhotos] = useState<PhotoItem[]>([])
   const [voice, setVoice] = useState<File | null>(null)
   const [voicePreview, setVoicePreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Rebuild previews whenever the selected files change; revoke old URLs on cleanup.
-  useEffect(() => {
-    const urls = files.map((f) => URL.createObjectURL(f))
-    setPreviews(urls)
-    return () => urls.forEach((u) => URL.revokeObjectURL(u))
-  }, [files])
-
   function addFiles(list: FileList | null) {
     if (!list || list.length === 0) return
-    setFiles((prev) => [...prev, ...Array.from(list)].slice(0, MAX_CHAR_PHOTOS))
+    setPhotos((prev) => {
+      const room = MAX_CHAR_PHOTOS - prev.length
+      if (room <= 0) return prev
+      const additions = Array.from(list)
+        .slice(0, room)
+        .map((file) => ({ file, url: URL.createObjectURL(file) }))
+      return [...prev, ...additions]
+    })
   }
   function removeFileAt(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index))
+    setPhotos((prev) => {
+      const target = prev[index]
+      if (target) URL.revokeObjectURL(target.url)
+      return prev.filter((_, i) => i !== index)
+    })
   }
   function clearFiles() {
-    setFiles([])
+    setPhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.url))
+      return []
+    })
   }
 
   function handleVoice(f: File | null) {
@@ -1178,7 +1186,7 @@ function CharacterManager({
   function resetForm() {
     setName("")
     setDescription("")
-    setFiles([])
+    clearFiles()
     handleVoice(null)
   }
 
@@ -1192,7 +1200,8 @@ function CharacterManager({
     setSaving(true)
     try {
       const imageUrls: string[] = []
-      for (const f of files) {
+      for (const p of photos) {
+        const f = p.file
         const safe = f.name.replace(/[^a-zA-Z0-9.]/g, "_")
         const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`
         const { error: upErr } = await supabase.storage.from("character-images").upload(path, f)
@@ -1275,9 +1284,9 @@ function CharacterManager({
         <div>
           <label className="block text-sm font-medium mb-1.5 text-neutral-300">Foto referensi (bisa beberapa, maks {MAX_CHAR_PHOTOS})</label>
           <div className="flex flex-wrap gap-2">
-            {previews.map((p, i) => (
-              <div key={i} className="relative h-20 w-20">
-                <img src={p} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
+            {photos.map((p, i) => (
+              <div key={p.url} className="relative h-20 w-20">
+                <img src={p.url} alt={`Foto ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-neutral-700" />
                 <button
                   type="button"
                   onClick={() => removeFileAt(i)}
@@ -1288,7 +1297,7 @@ function CharacterManager({
                 </button>
               </div>
             ))}
-            {files.length < MAX_CHAR_PHOTOS && (
+            {photos.length < MAX_CHAR_PHOTOS && (
               <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-neutral-700 bg-neutral-950 text-neutral-400 hover:border-indigo-500 hover:text-indigo-400 transition">
                 <IconPlus className="h-5 w-5" />
                 <span className="text-[10px]">Tambah</span>
@@ -1305,7 +1314,7 @@ function CharacterManager({
               </label>
             )}
           </div>
-          {files.length > 0 && (
+          {photos.length > 0 && (
             <button type="button" onClick={clearFiles} className="mt-2 flex items-center gap-1.5 text-sm text-red-400 hover:text-red-300">
               <IconTrash className="h-4 w-4" /> Hapus semua foto
             </button>
